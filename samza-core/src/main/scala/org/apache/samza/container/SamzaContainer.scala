@@ -334,6 +334,14 @@ object SamzaContainer extends Logging {
 
     info("Got change log system streams: %s" format changeLogSystemStreams)
 
+    val profilingSystemStream = config
+      .getStoreNames
+      .filter(config.getProfilingStream(_).isDefined)
+      .map(name => (name, config.getProfilingStream(name).get)).toMap
+      .mapValues(Util.getSystemStreamFromNames(_))
+
+    info("Got profiling streams: %s " format profilingSystemStream)
+
     val serdeManager = new SerdeManager(
       serdes = serdes,
       systemKeySerdes = systemKeySerdes,
@@ -530,6 +538,11 @@ object SamzaContainer extends Logging {
             else {
               TaskStorageManager.getStorePartitionDir(defaultStoreBaseDir, storeName, taskName)
             }
+            val storeProfilingSystemStream = if(profilingSystemStream.contains(storeName)) {
+              profilingSystemStream(storeName)
+            } else {
+              null
+            }
             val storageEngine = storageEngineFactory.getStorageEngine(
               storeName,
               storeBaseDir,
@@ -538,6 +551,7 @@ object SamzaContainer extends Logging {
               collector,
               taskInstanceMetrics.registry,
               changeLogSystemStreamPartition,
+              storeProfilingSystemStream,
               containerContext)
             (storeName, storageEngine)
         }

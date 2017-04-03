@@ -24,6 +24,7 @@ import java.io.File;
 import org.apache.samza.container.SamzaContainerContext;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.serializers.Serde;
+import org.apache.samza.system.SystemStream;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.task.MessageCollector;
 
@@ -43,6 +44,7 @@ public interface StorageEngineFactory<K, V> {
    * @param collector MessageCollector the storage engine uses to persist changes.
    * @param registry MetricsRegistry to which to publish storage-engine specific metrics.
    * @param changeLogSystemStreamPartition Samza stream partition from which to receive the changelog.
+   * @param profilingStream Information about the profiling stream
    * @param containerContext Information about the container in which the task is executing.
    * @return The storage engine instance.
    */
@@ -54,5 +56,6 @@ public interface StorageEngineFactory<K, V> {
     MessageCollector collector,
     MetricsRegistry registry,
     SystemStreamPartition changeLogSystemStreamPartition,
+    SystemStream profilingStream,
     SamzaContainerContext containerContext);
 }
