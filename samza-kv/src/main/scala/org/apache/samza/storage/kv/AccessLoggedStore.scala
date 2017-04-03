@@ -32,6 +32,13 @@ class AccessLoggedStore[K, V](
                                val profilingSystemStream: SystemStream)
   extends KeyValueStore[K, V] with Logging {
 
+  var addHeader = 0 ;
+
+  def addheader() = {
+    var msg = "operation, key, value, latency, time" ;
+    collector.send(new OutgoingMessageEnvelope(profilingSystemStream, msg)) ;
+  }
+
   object DBOperations extends Enumeration {
     type DBOperations = Value
     val READ = Value("read")
@@ -104,6 +111,11 @@ class AccessLoggedStore[K, V](
     }
 
     msg += ", " + latency + ", " + System.nanoTime();
+    if (addHeader %100 == 0) {
+      addheader() ;
+      addHeader = 0;
+    }
+    addHeader += 1;
     collector.send(new OutgoingMessageEnvelope(profilingSystemStream, msg))
     result
   }
