@@ -31,6 +31,7 @@ import org.apache.samza.task.MessageCollector
 import org.apache.samza.config.MetricsConfig.Config2Metrics
 import org.apache.samza.util.HighResolutionClock
 import org.apache.samza.util.Util.asScalaClock
+import org.apache.samza.system.SystemStream
 
 /**
  * A key value storage engine factory implementation
@@ -78,6 +79,7 @@ trait BaseKeyValueStorageEngineFactory[K, V] extends StorageEngineFactory[K, V] 
                         collector: MessageCollector,
                         registry: MetricsRegistry,
                         changeLogSystemStreamPartition: SystemStreamPartition,
+                        profilingSystemStream: SystemStream,
                         containerContext: SamzaContainerContext): StorageEngine = {
     val storageConfig = containerContext.config.subset("stores." + storeName + ".", true)
     val storeFactory = storageConfig.get("factory")
@@ -129,8 +131,14 @@ trait BaseKeyValueStorageEngineFactory[K, V] extends StorageEngineFactory[K, V] 
       serialized
     }
 
+    val maybeProfiler = if (profilingSystemStream != null) {
+      new AccessLoggedStore(maybeCachedStore, collector, profilingSystemStream)
+    } else {
+      maybeCachedStore
+    }
+
     // wrap with null value checking
-    val nullSafeStore = new NullSafeKeyValueStore(maybeCachedStore)
+    val nullSafeStore = new NullSafeKeyValueStore(maybeProfiler)
 
     // create the storage engine and return
     // TODO: Decide if we should use raw bytes when restoring

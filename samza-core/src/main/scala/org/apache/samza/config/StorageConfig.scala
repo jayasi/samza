@@ -35,6 +35,8 @@ object StorageConfig {
   val CHANGELOG_SYSTEM = "job.changelog.system"
   val CHANGELOG_DELETE_RETENTION_MS = "stores.%s.changelog.delete.retention.ms"
   val DEFAULT_CHANGELOG_DELETE_RETENTION_MS = TimeUnit.DAYS.toMillis(1)
+  val PROFILING_STREAM = "stores.%s.profiling"
+  val PROFILING_SYSTEM = "job.profiling.system"
 
   implicit def Config2Storage(config: Config) = new StorageConfig(config)
 }
@@ -59,6 +61,24 @@ class StorageConfig(config: Config) extends ScalaMapConfig(config) with Logging 
         }
         else {
           throw new SamzaException("changelog system is not defined:" + systemStream.get)
+        }
+      } else {
+        systemStream
+      }
+    systemStreamRes
+  }
+
+  def getProfilingStream(name: String) = {
+    //Looking for the profiling stream similar to the change log stream
+    val systemStream = getOption(PROFILING_STREAM format name)
+    val profilingSystem = getOption(PROFILING_SYSTEM)
+    val systemStreamRes =
+      if (systemStream.isDefined && ! systemStream.getOrElse("").contains('.')) {
+        if (profilingSystem.isDefined) {
+          Some(profilingSystem.get + "." + systemStream.get)
+        }
+        else {
+          throw new SamzaException("profiling system is not defined " + systemStream.get)
         }
       } else {
         systemStream
