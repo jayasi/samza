@@ -19,24 +19,6 @@
 
 package org.apache.samza.test.processor;
 
-import kafka.utils.TestUtils;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.samza.SamzaException;
-import org.apache.samza.config.Config;
-import org.apache.samza.config.MapConfig;
-import org.apache.samza.processor.StreamProcessor;
-import org.apache.samza.task.AsyncStreamTaskAdapter;
-import org.apache.samza.task.AsyncStreamTaskFactory;
-import org.apache.samza.task.StreamTaskFactory;
-import org.apache.samza.test.StandaloneIntegrationTestHarness;
-import org.apache.samza.test.StandaloneTestUtils;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -47,6 +29,24 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import kafka.utils.TestUtils;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.samza.SamzaException;
+import org.apache.samza.config.Config;
+import org.apache.samza.config.MapConfig;
+import org.apache.samza.config.ZkConfig;
+import org.apache.samza.processor.StreamProcessor;
+import org.apache.samza.task.AsyncStreamTaskAdapter;
+import org.apache.samza.task.AsyncStreamTaskFactory;
+import org.apache.samza.task.StreamTaskFactory;
+import org.apache.samza.test.StandaloneIntegrationTestHarness;
+import org.apache.samza.test.StandaloneTestUtils;
+import org.junit.Assert;
+import org.junit.Test;
 
 import static org.apache.samza.test.processor.IdentityStreamTask.endLatch;
 
@@ -69,7 +69,7 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
     // Note: createTopics needs to be called before creating a StreamProcessor. Otherwise it fails with a
     // TopicExistsException since StreamProcessor auto-creates them.
     createTopics(inputTopic, outputTopic);
-    final StreamProcessor processor = new StreamProcessor(1, new MapConfig(configs), new HashMap<>());
+    final StreamProcessor processor = new StreamProcessor(1, new MapConfig(configs), new HashMap<>(), IdentityStreamTask::new);
 
     produceMessages(inputTopic, messageCount);
     run(processor, endLatch);
@@ -132,7 +132,7 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
     configMap.remove("task.class");
     final Config configs = new MapConfig(configMap);
 
-    StreamProcessor processor = new StreamProcessor(1, configs, new HashMap<>());
+    StreamProcessor processor = new StreamProcessor(1, configs, new HashMap<>(), (StreamTaskFactory) null);
     run(processor, endLatch);
   }
 
@@ -144,21 +144,14 @@ public class TestStreamProcessor extends StandaloneIntegrationTestHarness {
   private Map<String, String> createConfigs(String testSystem, String inputTopic, String outputTopic, int messageCount) {
     Map<String, String> configs = new HashMap<>();
     configs.putAll(
-        StandaloneTestUtils.getStandaloneConfigs(
-            "test-job",
-            "org.apache.samza.test.processor.IdentityStreamTask"));
-    configs.putAll(
-        StandaloneTestUtils.getKafkaSystemConfigs(
-            testSystem,
-            bootstrapServers(),
-            zkConnect(),
-            null,
-            StandaloneTestUtils.SerdeAlias.STRING,
-            true));
+        StandaloneTestUtils.getStandaloneConfigs("test-job", "org.apache.samza.test.processor.IdentityStreamTask"));
+    configs.putAll(StandaloneTestUtils.getKafkaSystemConfigs(testSystem, bootstrapServers(), zkConnect(), null,
+            StandaloneTestUtils.SerdeAlias.STRING, true));
     configs.put("task.inputs", String.format("%s.%s", testSystem, inputTopic));
     configs.put("app.messageCount", String.valueOf(messageCount));
     configs.put("app.outputTopic", outputTopic);
     configs.put("app.outputSystem", testSystem);
+    configs.put(ZkConfig.ZK_CONNECT, zkConnect());
     return configs;
   }
 

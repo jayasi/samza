@@ -17,29 +17,26 @@
  * under the License.
  */
 
-package org.apache.samza.job.yarn
+package org.apache.samza.runtime;
 
-import org.apache.samza.config.MapConfig
-import org.apache.samza.util.hadoop.HttpFileSystem
-import org.junit.Assert._
-import org.junit.Test
+/**
+ * Operation to perform in the {@link ApplicationRunnerMain}
+ */
+public enum ApplicationRunnerOperation {
+  RUN("run"), KILL("kill"), STATUS("status");
 
+  private final String str;
 
-class TestYarnJobFactory {
+  public static ApplicationRunnerOperation fromString(String string) {
+    return ApplicationRunnerOperation.valueOf(string.toUpperCase());
+  }
 
-  @Test
-  def testGetJob {
+  ApplicationRunnerOperation(String str) {
+    this.str = str;
+  }
 
-    val jobFactory = new YarnJobFactory
-
-    val yarnJob = jobFactory.getJob(new MapConfig)
-
-    val hConfig = yarnJob.client.yarnClient.getConfig
-
-    assertEquals(classOf[HttpFileSystem].getName, hConfig.get("fs.http.impl"))
-
-    assertEquals(classOf[HttpFileSystem].getName, hConfig.get("fs.https.impl"))
-
+  @Override
+  public String toString() {
+    return str;
   }
 }
-
