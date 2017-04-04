@@ -25,17 +25,20 @@ import org.apache.samza.task.MessageCollector
 import org.apache.samza.util.Logging
 import org.apache.samza.system.OutgoingMessageEnvelope
 import org.apache.samza.system.SystemStream
+import org.apache.samza.serializers._
 
 class AccessLoggedStore[K, V](
                                val store: KeyValueStore[K, V],
                                val collector: MessageCollector,
-                               val profilingSystemStream: SystemStream)
+                               val profilingSystemStream: SystemStream,
+                               keySerde: Serde[K],
+                               msgSerde: Serde[V])
   extends KeyValueStore[K, V] with Logging {
 
   var addHeader = 0 ;
 
   def addheader() = {
-    var msg = "operation, key, value, latency, time" ;
+    var msg = "operation, key, keySize, value, valueSize, latency, time" ;
     collector.send(new OutgoingMessageEnvelope(profilingSystemStream, msg)) ;
   }
 
@@ -43,11 +46,11 @@ class AccessLoggedStore[K, V](
     type DBOperations = Value
     val READ = Value("read")
     val WRITE = Value("write")
-    val DELETE = Value("delete") ;
+    val DELETE = Value("delete")
   }
 
   def get(key: K): V = {
-    val toPrint = "read, "  + key ;
+    var toPrint = "read, " + key + ", " +  size(key, keySerde)
     measureLatencyAndWriteToStream(DBOperations.READ, toPrint, store.get(key))
   }
 
@@ -56,7 +59,7 @@ class AccessLoggedStore[K, V](
   }
 
   def put(key: K, value: V): Unit = {
-    val toPrint = "write,"  + key + ", "  + value ;
+    var toPrint = "write,"  + key + ", " + size(key, keySerde) + ", "  + value + ", " + size(value, msgSerde);
     measureLatencyAndWriteToStream(DBOperations.WRITE, toPrint, store.put(key, value))
   }
 
@@ -67,9 +70,8 @@ class AccessLoggedStore[K, V](
 
 
   def delete(key: K): Unit = {
-    val toPrint = "delete, " + key ;
+    var toPrint = "delete, " + key + ", " + size(key, keySerde) ;
     measureLatencyAndWriteToStream(DBOperations.DELETE, toPrint, store.delete(key))
-
   }
 
   def deleteAll(keys: util.List[K]): Unit = {
@@ -97,6 +99,14 @@ class AccessLoggedStore[K, V](
     trace("Flushed store.")
   }
 
+  def size[T](obj: T, serde: Serde[T]): Integer = {
+    if (obj == null) {
+      return 0
+    }
+    val bytes = serde.toBytes(obj)
+    bytes.size
+  }
+
   def measureLatencyAndWriteToStream[R](operation: DBOperations.Value, message: String, block: => R):R = {
     val time1 = System.nanoTime() ;
     val result = block
@@ -105,9 +115,9 @@ class AccessLoggedStore[K, V](
     var msg = message ;
 
     if(operation == DBOperations.READ) {
-      msg += ", " + result
+      msg += ", " + result + ", " + size(result.asInstanceOf[V], msgSerde)
     } else if (operation == DBOperations.DELETE) {
-      msg += ", "
+      msg += ", , "
     }
 
     msg += ", " + latency + ", " + System.nanoTime();
@@ -119,4 +129,7 @@ class AccessLoggedStore[K, V](
     collector.send(new OutgoingMessageEnvelope(profilingSystemStream, msg))
     result
   }
+
+
+
 }

@@ -132,7 +132,7 @@ trait BaseKeyValueStorageEngineFactory[K, V] extends StorageEngineFactory[K, V] 
     }
 
     val maybeProfiler = if (profilingSystemStream != null) {
-      new AccessLoggedStore(maybeCachedStore, collector, profilingSystemStream)
+      new AccessLoggedStore(maybeCachedStore, collector, profilingSystemStream, keySerde, msgSerde)
     } else {
       maybeCachedStore
     }
