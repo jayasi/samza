@@ -132,7 +132,7 @@ public interface KeyValueStore<K, V> {
      * @throws NullPointerException if the specified {@code keys} list, or any of the keys, is {@code null}.
      */
     public static <K, V> Map<K, V> getAll(final KeyValueStore<K, V> store, final List<K> keys) {
-      final Map<K, V> map = new HashMap<K, V>(keys.size());
+      final Map<K, V> map = new HashMap<>(keys.size());
 
       for (final K key : keys) {
         final V value = store.get(key);

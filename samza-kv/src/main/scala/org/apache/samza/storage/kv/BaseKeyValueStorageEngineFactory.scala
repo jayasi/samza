@@ -72,15 +72,15 @@ trait BaseKeyValueStorageEngineFactory[K, V] extends StorageEngineFactory[K, V] 
    * @param changeLogSystemStreamPartition Samza stream partition from which to receive the changelog.
    * @param containerContext Information about the container in which the task is executing.
    **/
-  def getStorageEngine( storeName: String,
-                        storeDir: File,
-                        keySerde: Serde[K],
-                        msgSerde: Serde[V],
-                        collector: MessageCollector,
-                        registry: MetricsRegistry,
-                        changeLogSystemStreamPartition: SystemStreamPartition,
-                        profilingSystemStream: SystemStream,
-                        containerContext: SamzaContainerContext): StorageEngine = {
+  def getStorageEngine(storeName: String,
+                       storeDir: File,
+                       keySerde: Serde[K],
+                       msgSerde: Serde[V],
+                       collector: MessageCollector,
+                       registry: MetricsRegistry,
+                       changeLogSystemStreamPartition: SystemStreamPartition,
+                       accessLogSystemStreamPartition: SystemStreamPartition,
+                       containerContext: SamzaContainerContext): StorageEngine = {
     val storageConfig = containerContext.config.subset("stores." + storeName + ".", true)
     val storeFactory = storageConfig.get("factory")
     var storePropertiesBuilder = new StoreProperties.StorePropertiesBuilder()
@@ -131,8 +131,8 @@ trait BaseKeyValueStorageEngineFactory[K, V] extends StorageEngineFactory[K, V] 
       serialized
     }
 
-    val maybeProfiler = if (profilingSystemStream != null) {
-      new AccessLoggedStore(maybeCachedStore, collector, profilingSystemStream, keySerde, msgSerde)
+    val maybeProfiler = if (accessLogSystemStreamPartition != null) {
+      new AccessLoggedStore(maybeCachedStore, collector, accessLogSystemStreamPartition)
     } else {
       maybeCachedStore
     }

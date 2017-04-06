@@ -334,13 +334,13 @@ object SamzaContainer extends Logging {
 
     info("Got change log system streams: %s" format changeLogSystemStreams)
 
-    val profilingSystemStream = config
+    val accessLogSystemsStreams = config
       .getStoreNames
-      .filter(config.getProfilingStream(_).isDefined)
-      .map(name => (name, config.getProfilingStream(name).get)).toMap
+      .filter(config.getAccessLogStream(_).isDefined)
+      .map(name => (name, config.getAccessLogStream(name).get)).toMap
       .mapValues(Util.getSystemStreamFromNames(_))
 
-    info("Got profiling streams: %s " format profilingSystemStream)
+    info("Got access log system streams: %s " format accessLogSystemsStreams)
 
     val serdeManager = new SerdeManager(
       serdes = serdes,
@@ -538,8 +538,9 @@ object SamzaContainer extends Logging {
             else {
               TaskStorageManager.getStorePartitionDir(defaultStoreBaseDir, storeName, taskName)
             }
-            val storeProfilingSystemStream = if(profilingSystemStream.contains(storeName)) {
-              profilingSystemStream(storeName)
+            val accessLogSystemStreamPartition = if(accessLogSystemsStreams.contains(storeName)) {
+              //Will this not break when changelog is not enabled?
+              new SystemStreamPartition(accessLogSystemsStreams(storeName), taskModel.getChangelogPartition)
             } else {
               null
             }
@@ -551,7 +552,7 @@ object SamzaContainer extends Logging {
               collector,
               taskInstanceMetrics.registry,
               changeLogSystemStreamPartition,
-              storeProfilingSystemStream,
+              accessLogSystemStreamPartition,
               containerContext)
             (storeName, storageEngine)
         }
