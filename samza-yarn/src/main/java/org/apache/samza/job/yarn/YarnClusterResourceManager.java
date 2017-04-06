@@ -31,16 +31,17 @@ import org.apache.samza.SamzaException;
 import org.apache.samza.clustermanager.*;
 import org.apache.samza.clustermanager.SamzaApplicationState;
 import org.apache.samza.clustermanager.SamzaContainerLaunchException;
-import org.apache.samza.config.ClusterManagerConfig;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.ShellCommandConfig;
 import org.apache.samza.config.YarnConfig;
 import org.apache.samza.coordinator.JobModelManager;
 import org.apache.samza.job.CommandBuilder;
+import org.apache.samza.job.yarn.YarnContainer;
 import org.apache.samza.metrics.MetricsRegistryMap;
 import org.apache.samza.util.hadoop.HttpFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -119,12 +120,6 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
     hConfig = new YarnConfiguration();
     hConfig.set("fs.http.impl", HttpFileSystem.class.getName());
 
-    // Use the Samza job config "fs.<scheme>.impl" to override YarnConfiguration
-    FileSystemImplConfig fsImplConfig = new FileSystemImplConfig(config);
-    fsImplConfig.getSchemes().forEach(
-        scheme -> hConfig.set(fsImplConfig.getFsImplKey(scheme), fsImplConfig.getFsImplClassName(scheme))
-    );
-
     MetricsRegistryMap registry = new MetricsRegistryMap();
     metrics = new SamzaAppMasterMetrics(config, samzaAppState, registry);
 
@@ -150,14 +145,7 @@ public class YarnClusterResourceManager extends ClusterResourceManager implement
     this.service = new SamzaYarnAppMasterService(config, samzaAppState, this.state, registry, hConfig);
 
     log.info("ContainerID str {}, Nodehost  {} , Nodeport  {} , NodeHttpport {}", new Object [] {containerIdStr, nodeHostString, nodePort, nodeHttpPort});
-    ClusterManagerConfig clusterManagerConfig = new ClusterManagerConfig(config);
-    this.lifecycle = new SamzaYarnAppMasterLifecycle(
-        clusterManagerConfig.getContainerMemoryMb(),
-        clusterManagerConfig.getNumCores(),
-        samzaAppState,
-        state,
-        amClient
-    );
+    this.lifecycle = new SamzaYarnAppMasterLifecycle(yarnConfig.getContainerMaxMemoryMb(), yarnConfig.getContainerMaxCpuCores(), samzaAppState, state, amClient );
 
     yarnContainerRunner = new YarnContainerRunner(config, hConfig);
   }

@@ -22,7 +22,6 @@ import org.apache.samza.annotation.InterfaceStability;
 import org.apache.samza.config.Config;
 import org.apache.samza.processor.SamzaContainerController;
 
-
 @InterfaceStability.Evolving
 public interface JobCoordinatorFactory {
   /**

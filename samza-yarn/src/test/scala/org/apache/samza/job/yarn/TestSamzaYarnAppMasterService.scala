@@ -23,12 +23,17 @@ import java.io.BufferedReader
 import java.net.URL
 import java.io.InputStreamReader
 import org.apache.hadoop.yarn.util.ConverterUtils
+import org.apache.samza.Partition
 import org.apache.samza.clustermanager.SamzaApplicationState
 import org.apache.samza.config.MapConfig
+import org.apache.samza.metrics.MetricsRegistry
+import org.apache.samza.system.SystemStreamMetadata.SystemStreamPartitionMetadata
+import org.apache.samza.system.{SystemStreamMetadata, SystemStreamPartition, SystemAdmin, SystemFactory}
 import org.junit.Assert._
 import org.junit.Test
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import org.apache.samza.config.Config
+import org.apache.samza.config.JobConfig.Config2Job
 import org.apache.samza.container.TaskName
 import org.apache.samza.coordinator.JobModelManager
 import org.apache.samza.coordinator.stream.MockCoordinatorStreamSystemFactory
@@ -108,7 +113,7 @@ class TestSamzaYarnAppMasterService {
     "yarn.container.retry.count" -> "1",
     "yarn.container.retry.window.ms" -> "1999999999",
     "job.coordinator.system" -> "coordinator",
-    "systems.coordinator.samza.factory" -> classOf[MockCoordinatorStreamSystemFactory].getCanonicalName).asJava)
+    "systems.coordinator.samza.factory" -> classOf[MockCoordinatorStreamSystemFactory].getCanonicalName))
 }
 
 

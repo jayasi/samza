@@ -24,7 +24,7 @@ import org.apache.samza.SamzaException;
 import org.apache.samza.config.MetricsConfig;
 import org.apache.samza.metrics.MetricsReporter;
 import org.apache.samza.metrics.MetricsReporterFactory;
-import scala.collection.JavaConverters;
+import scala.collection.JavaConversions;
 
 /**
  * Helper class that instantiates the MetricsReporter.
@@ -36,8 +36,7 @@ public class MetricsReporterLoader {
 
   public static Map<String, MetricsReporter> getMetricsReporters(MetricsConfig config, String containerName) {
     Map<String, MetricsReporter> metricsReporters = new HashMap<>();
-
-    for (String metricsReporterName : JavaConverters.seqAsJavaListConverter(config.getMetricReporterNames()).asJava()) {
+    for (String metricsReporterName : JavaConversions.seqAsJavaList(config.getMetricReporterNames())) {
       String metricsFactoryClass = config.getMetricsFactoryClass(metricsReporterName).get();
       if (metricsFactoryClass == null) {
         throw new SamzaException(String.format("Metrics reporter %s missing .class config", metricsReporterName));

@@ -23,6 +23,7 @@ package org.apache.samza.system.kafka
 
 import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.channels.ClosedByInterruptException
+import java.util.Map.Entry
 import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
 
 import kafka.api._
@@ -34,8 +35,9 @@ import org.apache.samza.util.ExponentialSleepStrategy
 import org.apache.samza.util.Logging
 import org.apache.samza.util.ThreadNamePrefix.SAMZA_THREAD_NAME_PREFIX
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import scala.collection.concurrent
+import scala.collection.mutable
 import org.apache.samza.util.KafkaUtil
 
 /**
@@ -69,7 +71,7 @@ class BrokerProxy(
   val sleepMSWhileNoTopicPartitions = 100
 
   /** What's the next offset for a particular partition? **/
-  val nextOffsets:concurrent.Map[TopicAndPartition, Long] = new ConcurrentHashMap[TopicAndPartition, Long]().asScala
+  val nextOffsets:concurrent.Map[TopicAndPartition, Long] = new ConcurrentHashMap[TopicAndPartition, Long]()
 
   /** Block on the first call to get message if the fetcher has not yet returned its initial results **/
   // TODO: It should be sufficient to just use the count down latch and await on it for each of the calls, but
@@ -93,7 +95,7 @@ class BrokerProxy(
   def addTopicPartition(tp: TopicAndPartition, nextOffset: Option[String]) = {
     debug("Adding new topic and partition %s to queue for %s" format (tp, host))
 
-    if (nextOffsets.asJava.containsKey(tp)) {
+    if (nextOffsets.containsKey(tp)) {
       toss("Already consuming TopicPartition %s" format tp)
     }
 
@@ -111,13 +113,13 @@ class BrokerProxy(
 
     nextOffsets += tp -> offset
 
-    metrics.topicPartitions.get((host, port)).set(nextOffsets.size)
+    metrics.topicPartitions(host, port).set(nextOffsets.size)
   }
 
   def removeTopicPartition(tp: TopicAndPartition) = {
-    if (nextOffsets.asJava.containsKey(tp)) {
+    if (nextOffsets.containsKey(tp)) {
       val offset = nextOffsets.remove(tp)
-      metrics.topicPartitions.get((host, port)).set(nextOffsets.size)
+      metrics.topicPartitions(host, port).set(nextOffsets.size)
       debug("Removed %s" format tp)
       offset
     } else {
@@ -134,7 +136,7 @@ class BrokerProxy(
         (new ExponentialSleepStrategy).run(
           loop => {
             if (reconnect) {
-              metrics.reconnects.get((host, port)).inc
+              metrics.reconnects(host, port).inc
               simpleConsumer.close()
               simpleConsumer = createSimpleConsumer()
             }
@@ -176,23 +178,23 @@ class BrokerProxy(
     val topicAndPartitionsToFetch = nextOffsets.filterKeys(messageSink.needsMoreMessages(_)).toList
 
     if (topicAndPartitionsToFetch.size > 0) {
-      metrics.brokerReads.get((host, port)).inc
+      metrics.brokerReads(host, port).inc
       val response: FetchResponse = simpleConsumer.defaultFetch(topicAndPartitionsToFetch: _*)
       firstCall = false
       firstCallBarrier.countDown()
 
       // Split response into errors and non errors, processing the errors first
-      val (nonErrorResponses, errorResponses) = response.data.toSet.partition(_._2.error == ErrorMapping.NoError)
+      val (nonErrorResponses, errorResponses) = response.data.entrySet().partition(_.getValue.error == ErrorMapping.NoError)
 
       handleErrors(errorResponses, response)
 
-      nonErrorResponses.foreach { case (tp, data) => moveMessagesToTheirQueue(tp, data) }
+      nonErrorResponses.foreach { nonError => moveMessagesToTheirQueue(nonError.getKey, nonError.getValue) }
     } else {
       refreshLatencyMetrics
 
       debug("No topic/partitions need to be fetched for %s:%s right now. Sleeping %sms." format (host, port, sleepMSWhileNoTopicPartitions))
 
-      metrics.brokerSkippedFetchRequests.get((host, port)).inc
+      metrics.brokerSkippedFetchRequests(host, port).inc
 
       Thread.sleep(sleepMSWhileNoTopicPartitions)
     }
@@ -219,7 +221,7 @@ class BrokerProxy(
     immutableNextOffsetsCopy.keySet.foreach(abdicate(_))
   }
 
-  def handleErrors(errorResponses: Set[(TopicAndPartition, FetchResponsePartitionData)], response:FetchResponse) = {
+  def handleErrors(errorResponses: mutable.Set[Entry[TopicAndPartition, FetchResponsePartitionData]], response:FetchResponse) = {
     // FetchResponse should really return Option and a list of the errors so we don't have to find them ourselves
     case class Error(tp: TopicAndPartition, code: Short, exception: Throwable)
 
@@ -227,10 +229,10 @@ class BrokerProxy(
 
     // Convert FetchResponse into easier-to-work-with Errors
     val errors = for (
-      (topicAndPartition, responseData) <- errorResponses;
-      errorCode <- Option(response.errorCode(topicAndPartition.topic, topicAndPartition.partition)); // Scala's being cranky about referring to error.getKey values...
+      error <- errorResponses;
+      errorCode <- Option(response.errorCode(error.getKey.topic, error.getKey.partition)); // Scala's being cranky about referring to error.getKey values...
       exception <- Option(ErrorMapping.exceptionFor(errorCode))
-    ) yield new Error(topicAndPartition, errorCode, exception)
+    ) yield new Error(error.getKey, errorCode, exception)
 
     val (notLeaderOrUnknownTopic, otherErrors) = errors.partition { case (e) => e.code == ErrorMapping.NotLeaderForPartitionCode || e.code == ErrorMapping.UnknownTopicOrPartitionCode }
     val (offsetOutOfRangeErrors, remainingErrors) = otherErrors.partition(_.code == ErrorMapping.OffsetOutOfRangeCode)
@@ -272,10 +274,10 @@ class BrokerProxy(
       nextOffset = message.nextOffset
 
       val bytesSize = message.message.payloadSize + message.message.keySize
-      metrics.reads.get(tp).inc
-      metrics.bytesRead.get(tp).inc(bytesSize)
-      metrics.brokerBytesRead.get((host, port)).inc(bytesSize)
-      metrics.offsets.get(tp).set(nextOffset)
+      metrics.reads(tp).inc
+      metrics.bytesRead(tp).inc(bytesSize)
+      metrics.brokerBytesRead(host, port).inc(bytesSize)
+      metrics.offsets(tp).set(nextOffset)
     }
 
     nextOffsets.replace(tp, nextOffset) // use replace rather than put in case this tp was removed while we were fetching.
@@ -283,8 +285,8 @@ class BrokerProxy(
     // Update high water mark
     val hw = data.hw
     if (hw >= 0) {
-      metrics.highWatermark.get(tp).set(hw)
-      metrics.lag.get(tp).set(hw - nextOffset)
+      metrics.highWatermark(tp).set(hw)
+      metrics.lag(tp).set(hw - nextOffset)
     } else {
       debug("Got a high water mark less than 0 (%d) for %s, so skipping." format (hw, tp))
     }
@@ -325,10 +327,10 @@ class BrokerProxy(
         if (latestOffset >= 0) {
           // only update the registered topicAndpartitions
           if(metrics.highWatermark.containsKey(topicAndPartition)) {
-            metrics.highWatermark.get(topicAndPartition).set(latestOffset)
+            metrics.highWatermark(topicAndPartition).set(latestOffset)
           }
           if(metrics.lag.containsKey(topicAndPartition)) {
-            metrics.lag.get(topicAndPartition).set(latestOffset - offset)
+            metrics.lag(topicAndPartition).set(latestOffset - offset)
           }
         }
       }

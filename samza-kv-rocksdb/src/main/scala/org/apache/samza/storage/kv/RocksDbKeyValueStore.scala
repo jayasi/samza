@@ -205,15 +205,14 @@ class RocksDbKeyValueStore(
   class RocksDbIterator(iter: RocksIterator) extends KeyValueIterator[Array[Byte], Array[Byte]] {
     private var open = true
     private var firstValueAccessed = false
-
-    override def close() = {
+    def close() = {
       open = false
       iter.close()
     }
 
-    override def remove() = throw new UnsupportedOperationException("RocksDB iterator doesn't support remove")
+    def remove() = throw new UnsupportedOperationException("RocksDB iterator doesn't support remove")
 
-    override def hasNext() = iter.isValid
+    def hasNext() = iter.isValid
 
     // The iterator is already pointing to the next element
     protected def peekKey() = {
@@ -232,7 +231,7 @@ class RocksDbKeyValueStore(
     // current element we are pointing to and advance the iterator to the next 
     // location (The new location may or may not be valid - this will surface
     // when the next next() call is made, the isValid will fail)
-    override def next() = {
+    def next() = {
       if (!hasNext()) {
         throw new NoSuchElementException
       }

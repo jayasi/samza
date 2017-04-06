@@ -20,12 +20,12 @@
 package org.apache.samza.system
 
 
-import java.util
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
+
+import scala.collection.JavaConversions._
 import org.apache.samza.serializers.SerdeManager
 import org.apache.samza.util.{Logging, TimerUtils}
-import org.apache.samza.system.chooser.MessageChooser
+import org.apache.samza.system.chooser.{DefaultChooser, MessageChooser}
 import org.apache.samza.SamzaException
 import java.util.ArrayDeque
 import java.util.HashSet
@@ -152,11 +152,10 @@ class SystemConsumers (
 
   def start {
     debug("Starting consumers.")
-    emptySystemStreamPartitionsBySystem.asScala ++= unprocessedMessagesBySSP
+    emptySystemStreamPartitionsBySystem ++= unprocessedMessagesBySSP
       .keySet
-      .asScala
       .groupBy(_.getSystem)
-      .mapValues(systemStreamPartitions => new util.HashSet(systemStreamPartitions.toSeq.asJava))
+      .mapValues(systemStreamPartitions => new HashSet(systemStreamPartitions.toSeq))
 
     consumers
       .keySet

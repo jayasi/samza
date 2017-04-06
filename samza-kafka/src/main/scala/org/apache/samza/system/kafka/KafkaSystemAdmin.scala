@@ -21,17 +21,20 @@ package org.apache.samza.system.kafka
 
 import java.util
 import java.util.{Properties, UUID}
+
 import kafka.admin.AdminUtils
 import kafka.api._
-import kafka.common.TopicAndPartition
+import kafka.common.{TopicAndPartition, TopicExistsException}
 import kafka.consumer.{ConsumerConfig, SimpleConsumer}
 import kafka.utils.ZkUtils
-import org.apache.kafka.common.errors.TopicExistsException
+import org.apache.samza.config.KafkaConfig
 import org.apache.samza.system.SystemStreamMetadata.SystemStreamPartitionMetadata
 import org.apache.samza.system._
 import org.apache.samza.util.{ClientUtilTopicMetadataStore, ExponentialSleepStrategy, KafkaUtil, Logging}
 import org.apache.samza.{Partition, SamzaException}
-import scala.collection.JavaConverters._
+
+import scala.collection.JavaConversions
+import scala.collection.JavaConversions._
 
 
 object KafkaSystemAdmin extends Logging {
@@ -56,7 +59,7 @@ object KafkaSystemAdmin extends Logging {
               (systemStreamPartition.getPartition, partitionMetadata)
             })
             .toMap
-          val streamMetadata = new SystemStreamMetadata(streamName, streamPartitionMetadata.asJava)
+          val streamMetadata = new SystemStreamMetadata(streamName, streamPartitionMetadata)
           (streamName, streamMetadata)
       }
       .toMap
@@ -148,7 +151,7 @@ class KafkaSystemAdmin(
     retryBackoff.run(
       loop => {
         val metadata = TopicMetadataCache.getTopicMetadata(
-          streams.asScala.toSet,
+          streams.toSet,
           systemName,
           getTopicMetadata,
           metadataTTL)
@@ -159,11 +162,11 @@ class KafkaSystemAdmin(
               pm =>
                 new Partition(pm.partitionId) -> new SystemStreamPartitionMetadata("", "", "")
             }.toMap[Partition, SystemStreamPartitionMetadata]
-            (topic -> new SystemStreamMetadata(topic, partitionsMap.asJava))
+            (topic -> new SystemStreamMetadata(topic, partitionsMap))
           }
         }
         loop.done
-        result.asJava
+        JavaConversions.mapAsJavaMap(result)
       },
 
       (exception, loop) => {
@@ -185,11 +188,11 @@ class KafkaSystemAdmin(
     // This is safe to do with Kafka, even if a topic is key-deduped. If the
     // offset doesn't exist on a compacted topic, Kafka will return the first
     // message AFTER the offset that was specified in the fetch request.
-    offsets.asScala.mapValues(offset => (offset.toLong + 1).toString).asJava
+    offsets.mapValues(offset => (offset.toLong + 1).toString)
   }
 
   override def getSystemStreamMetadata(streams: java.util.Set[String]) =
-    getSystemStreamMetadata(streams, new ExponentialSleepStrategy(initialDelayMs = 500)).asJava
+    getSystemStreamMetadata(streams, new ExponentialSleepStrategy(initialDelayMs = 500))
 
   /**
    * Given a set of stream names (topics), fetch metadata from Kafka for each
@@ -204,7 +207,7 @@ class KafkaSystemAdmin(
     retryBackoff.run(
       loop => {
         val metadata = TopicMetadataCache.getTopicMetadata(
-          streams.asScala.toSet,
+          streams.toSet,
           systemName,
           getTopicMetadata,
           metadataTTL)
@@ -238,7 +241,12 @@ class KafkaSystemAdmin(
                   debug("Stripping newest offsets for %s because the topic appears empty." format topicAndPartition)
                   newestOffsets -= topicAndPartition
                   debug("Setting oldest offset to 0 to consume from beginning")
-                  oldestOffsets += (topicAndPartition -> "0")
+                  oldestOffsets.get(topicAndPartition) match {
+                    case Some(s) =>
+                      oldestOffsets.updated(topicAndPartition, "0")
+                    case None =>
+                      oldestOffsets.put(topicAndPartition, "0")
+                  }
                 }
             }
           } finally {

@@ -33,7 +33,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 
 public class TestLocalStoreMonitor {
@@ -51,15 +50,10 @@ public class TestLocalStoreMonitor {
   // Create mock for jobs client.
   private JobsClient jobsClientMock = Mockito.mock(JobsClient.class);
 
-  private LocalStoreMonitorMetrics localStoreMonitorMetrics;
-
-  private long taskStoreSize;
-
   @Before
   public void setUp() throws Exception {
     // Make scaffold directories for testing.
     FileUtils.forceMkdir(taskStoreDir);
-    taskStoreSize = taskStoreDir.getTotalSpace();
 
     // Set default return values for methods.
     Mockito.when(jobsClientMock.getJobStatus(Mockito.any()))
@@ -69,11 +63,9 @@ public class TestLocalStoreMonitor {
     Mockito.when(jobsClientMock.getTasks(Mockito.any()))
            .thenReturn(ImmutableList.of(task));
 
-    localStoreMonitorMetrics = new LocalStoreMonitorMetrics("TestMonitorName", new NoOpMetricsRegistry());
-
     // Initialize the local store monitor with mock and config
     localStoreMonitor = new LocalStoreMonitor(new LocalStoreMonitorConfig(new MapConfig(config)),
-                                              localStoreMonitorMetrics,
+                                              new NoOpMetricsRegistry(),
                                               jobsClientMock);
   }
 
@@ -83,13 +75,10 @@ public class TestLocalStoreMonitor {
     FileUtils.deleteDirectory(taskStoreDir);
   }
 
-  // TODO: Fix in SAMZA-1183
-  //@Test
+  @Test
   public void shouldDeleteLocalTaskStoreWhenItHasNoOffsetFile() throws Exception {
     localStoreMonitor.monitor();
     assertTrue("Task store directory should not exist.", !taskStoreDir.exists());
-    assertEquals(taskStoreSize, localStoreMonitorMetrics.diskSpaceFreedInBytes.getCount());
-    assertEquals(2, localStoreMonitorMetrics.noOfDeletedTaskPartitionStores.getCount());
   }
 
   @Test
@@ -99,7 +88,6 @@ public class TestLocalStoreMonitor {
     offsetFile.setLastModified(0);
     localStoreMonitor.monitor();
     assertTrue("Offset file should not exist.", !offsetFile.exists());
-    assertEquals(0, localStoreMonitorMetrics.diskSpaceFreedInBytes.getCount());
   }
 
   @Test
@@ -108,11 +96,8 @@ public class TestLocalStoreMonitor {
     FileUtils.forceMkdir(inActiveStoreDir);
     File inActiveTaskDir = new File(inActiveStoreDir, "test-task");
     FileUtils.forceMkdir(inActiveTaskDir);
-    long inActiveTaskDirSize = inActiveTaskDir.getTotalSpace();
     localStoreMonitor.monitor();
     assertTrue("Inactive task store directory should not exist.", !inActiveTaskDir.exists());
-    assertEquals(taskStoreSize + inActiveTaskDirSize, localStoreMonitorMetrics.diskSpaceFreedInBytes.getCount());
-    assertEquals(2, localStoreMonitorMetrics.noOfDeletedTaskPartitionStores.getCount());
   }
 
   @Test
@@ -120,7 +105,6 @@ public class TestLocalStoreMonitor {
     File offsetFile = createOffsetFile(taskStoreDir);
     localStoreMonitor.monitor();
     assertTrue("Offset file should exist.", offsetFile.exists());
-    assertEquals(0, localStoreMonitorMetrics.diskSpaceFreedInBytes.getCount());
   }
 
   @Test
@@ -130,11 +114,9 @@ public class TestLocalStoreMonitor {
     File offsetFile = createOffsetFile(taskStoreDir);
     localStoreMonitor.monitor();
     assertTrue("Offset file should exist.", offsetFile.exists());
-    assertEquals(0, localStoreMonitorMetrics.diskSpaceFreedInBytes.getCount());
   }
 
-  // TODO: Fix in SAMZA-1183
-  //@Test
+  @Test
   public void shouldDeleteTaskStoreWhenTaskPreferredStoreIsNotLocalHost() throws Exception {
     Task task = new Task("notLocalHost", "test-task", 0,
                          new ArrayList<>(), ImmutableList.of("test-store"));
@@ -142,8 +124,6 @@ public class TestLocalStoreMonitor {
            .thenReturn(ImmutableList.of(task));
     localStoreMonitor.monitor();
     assertTrue("Task store directory should not exist.", !taskStoreDir.exists());
-    assertEquals(taskStoreSize, localStoreMonitorMetrics.diskSpaceFreedInBytes.getCount());
-    assertEquals(2, localStoreMonitorMetrics.noOfDeletedTaskPartitionStores.getCount());
   }
 
   private static File createOffsetFile(File taskStoreDir) throws Exception {

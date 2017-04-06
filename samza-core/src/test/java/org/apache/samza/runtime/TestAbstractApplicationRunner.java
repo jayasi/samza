@@ -25,13 +25,11 @@ import org.apache.samza.config.JobConfig;
 import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.StreamConfig;
 import org.apache.samza.application.StreamApplication;
-import org.apache.samza.job.ApplicationStatus;
 import org.apache.samza.system.StreamSpec;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-
 public class TestAbstractApplicationRunner {
   private static final String STREAM_ID = "t3st-Stream_Id";
   private static final String STREAM_ID_INVALID = "test#Str3amId!";
@@ -60,7 +58,7 @@ public class TestAbstractApplicationRunner {
                                       StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     assertEquals(TEST_PHYSICAL_NAME, spec.getPhysicalName());
   }
@@ -73,7 +71,7 @@ public class TestAbstractApplicationRunner {
                                       StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     assertEquals(STREAM_ID, spec.getPhysicalName());
   }
@@ -86,7 +84,7 @@ public class TestAbstractApplicationRunner {
                                       StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     assertEquals(TEST_SYSTEM, spec.getSystemName());
   }
@@ -99,7 +97,7 @@ public class TestAbstractApplicationRunner {
                                 JobConfig.JOB_DEFAULT_SYSTEM(), TEST_DEFAULT_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     assertEquals(TEST_DEFAULT_SYSTEM, spec.getSystemName());
   }
@@ -113,7 +111,7 @@ public class TestAbstractApplicationRunner {
                                 JobConfig.JOB_DEFAULT_SYSTEM(), TEST_DEFAULT_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     assertEquals(TEST_SYSTEM, spec.getSystemName());
   }
@@ -125,7 +123,7 @@ public class TestAbstractApplicationRunner {
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     assertEquals(TEST_SYSTEM, spec.getSystemName());
   }
@@ -141,7 +139,7 @@ public class TestAbstractApplicationRunner {
                                     "systemProperty3", "systemValue3");
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     Map<String, String> properties = spec.getConfig();
     assertEquals(3, properties.size());
@@ -155,7 +153,7 @@ public class TestAbstractApplicationRunner {
 
   // The samza properties (which are invalid for the underlying system) should be filtered out.
   @Test
-  public void testGetStreamSamzaPropertiesOmitted() {
+  public void testgetStreamSamzaPropertiesOmitted() {
     Config config = buildStreamConfig(STREAM_ID,
                               StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME,
                                     StreamConfig.SYSTEM(), TEST_SYSTEM,
@@ -164,7 +162,7 @@ public class TestAbstractApplicationRunner {
                                     "systemProperty3", "systemValue3");
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID);
+    StreamSpec spec = runner.getStream(STREAM_ID);
 
     Map<String, String> properties = spec.getConfig();
     assertEquals(3, properties.size());
@@ -174,36 +172,15 @@ public class TestAbstractApplicationRunner {
     assertNull(spec.get(String.format(StreamConfig.SYSTEM_FOR_STREAM_ID(), STREAM_ID)));
   }
 
-  @Test
-  public void testStreamConfigOverrides() {
-    final String sysStreamPrefix = String.format("systems.%s.streams.%s.", TEST_SYSTEM, TEST_PHYSICAL_NAME);
-    Config config = addConfigs(buildStreamConfig(STREAM_ID,
-        StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME,
-        StreamConfig.SYSTEM(), TEST_SYSTEM,
-        "systemProperty1", "systemValue1",
-        "systemProperty2", "systemValue2",
-        "systemProperty3", "systemValue3"),
-        sysStreamPrefix + "systemProperty4", "systemValue4",
-        sysStreamPrefix + "systemProperty2", "systemValue8");
-
-    AbstractApplicationRunner env = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = env.getStreamSpec(STREAM_ID);
-
-    Map<String, String> properties = spec.getConfig();
-    assertEquals(4, properties.size());
-    assertEquals("systemValue4", properties.get("systemProperty4"));
-    assertEquals("systemValue2", properties.get("systemProperty2"));
-  }
-
   // When the physicalName argument is passed explicitly it should be used, regardless of whether it is also in the config
   @Test
-  public void testGetStreamPhysicalNameArgSimple() {
+  public void testgetStreamPhysicalNameArgSimple() {
     Config config = buildStreamConfig(STREAM_ID,
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2, // This should be ignored because of the explicit arg
                                       StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID, TEST_PHYSICAL_NAME);
+    StreamSpec spec = runner.getStream(STREAM_ID, TEST_PHYSICAL_NAME);
 
     assertEquals(STREAM_ID, spec.getId());
     assertEquals(TEST_PHYSICAL_NAME, spec.getPhysicalName());
@@ -212,37 +189,37 @@ public class TestAbstractApplicationRunner {
 
   // Special characters are allowed for the physical name
   @Test
-  public void testGetStreamPhysicalNameArgSpecialCharacters() {
+  public void testgetStreamPhysicalNameArgSpecialCharacters() {
     Config config = buildStreamConfig(STREAM_ID,
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2,
                                       StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID, TEST_PHYSICAL_NAME_SPECIAL_CHARS);
+    StreamSpec spec = runner.getStream(STREAM_ID, TEST_PHYSICAL_NAME_SPECIAL_CHARS);
     assertEquals(TEST_PHYSICAL_NAME_SPECIAL_CHARS, spec.getPhysicalName());
   }
 
   // Null is allowed for the physical name
   @Test
-  public void testGetStreamPhysicalNameArgNull() {
+  public void testgetStreamPhysicalNameArgNull() {
     Config config = buildStreamConfig(STREAM_ID,
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2,
                                       StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID, null);
+    StreamSpec spec = runner.getStream(STREAM_ID, null);
     assertNull(spec.getPhysicalName());
   }
 
   // When the system name is provided explicitly, it should be used, regardless of whether it's also in the config
   @Test
-  public void testGetStreamSystemNameArgValid() {
+  public void testgetStreamSystemNameArgValid() {
     Config config = buildStreamConfig(STREAM_ID,
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2, // This should be ignored because of the explicit arg
                                       StreamConfig.SYSTEM(), TEST_SYSTEM2);              // This too
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    StreamSpec spec = runner.getStreamSpec(STREAM_ID, TEST_PHYSICAL_NAME, TEST_SYSTEM);
+    StreamSpec spec = runner.getStream(STREAM_ID, TEST_PHYSICAL_NAME, TEST_SYSTEM);
 
     assertEquals(STREAM_ID, spec.getId());
     assertEquals(TEST_PHYSICAL_NAME, spec.getPhysicalName());
@@ -251,65 +228,65 @@ public class TestAbstractApplicationRunner {
 
   // Special characters are NOT allowed for system name, because it's used as an identifier in the config.
   @Test(expected = IllegalArgumentException.class)
-  public void testGetStreamSystemNameArgInvalid() {
+  public void testgetStreamSystemNameArgInvalid() {
     Config config = buildStreamConfig(STREAM_ID,
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2,
                                       StreamConfig.SYSTEM(), TEST_SYSTEM2);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    runner.getStreamSpec(STREAM_ID, TEST_PHYSICAL_NAME, TEST_SYSTEM_INVALID);
+    runner.getStream(STREAM_ID, TEST_PHYSICAL_NAME, TEST_SYSTEM_INVALID);
   }
 
   // Empty strings are NOT allowed for system name, because it's used as an identifier in the config.
   @Test(expected = IllegalArgumentException.class)
-  public void testGetStreamSystemNameArgEmpty() {
+  public void testgetStreamSystemNameArgEmpty() {
     Config config = buildStreamConfig(STREAM_ID,
         StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2,
         StreamConfig.SYSTEM(), TEST_SYSTEM2);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    runner.getStreamSpec(STREAM_ID, TEST_PHYSICAL_NAME, "");
+    runner.getStream(STREAM_ID, TEST_PHYSICAL_NAME, "");
   }
 
   // Null is not allowed for system name.
   @Test(expected = NullPointerException.class)
-  public void testGetStreamSystemNameArgNull() {
+  public void testgetStreamSystemNameArgNull() {
     Config config = buildStreamConfig(STREAM_ID,
                                       StreamConfig.PHYSICAL_NAME(), TEST_PHYSICAL_NAME2,
                                       StreamConfig.SYSTEM(), TEST_SYSTEM2);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    runner.getStreamSpec(STREAM_ID, TEST_PHYSICAL_NAME, null);
+    runner.getStream(STREAM_ID, TEST_PHYSICAL_NAME, null);
   }
 
   // Special characters are NOT allowed for streamId, because it's used as an identifier in the config.
   @Test(expected = IllegalArgumentException.class)
-  public void testGetStreamStreamIdInvalid() {
+  public void testgetStreamStreamIdInvalid() {
     Config config = buildStreamConfig(STREAM_ID_INVALID,
         StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    runner.getStreamSpec(STREAM_ID_INVALID);
+    runner.getStream(STREAM_ID_INVALID);
   }
 
   // Empty strings are NOT allowed for streamId, because it's used as an identifier in the config.
   @Test(expected = IllegalArgumentException.class)
-  public void testGetStreamStreamIdEmpty() {
+  public void testgetStreamStreamIdEmpty() {
     Config config = buildStreamConfig("",
         StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    runner.getStreamSpec("");
+    runner.getStream("");
   }
 
   // Null is not allowed for streamId.
   @Test(expected = NullPointerException.class)
-  public void testGetStreamStreamIdNull() {
+  public void testgetStreamStreamIdNull() {
     Config config = buildStreamConfig(null,
         StreamConfig.SYSTEM(), TEST_SYSTEM);
 
     AbstractApplicationRunner runner = new TestAbstractApplicationRunnerImpl(config);
-    runner.getStreamSpec(null);
+    runner.getStream(null);
   }
 
 
@@ -350,18 +327,7 @@ public class TestAbstractApplicationRunner {
 
     @Override
     public void run(StreamApplication streamApp) {
-      // do nothing. We're only testing the stream creation methods at this point.
-    }
-
-    @Override
-    public void kill(StreamApplication streamApp) {
-      // do nothing. We're only testing the stream creation methods at this point.
-    }
-
-    @Override
-    public ApplicationStatus status(StreamApplication streamApp) {
-      // do nothing. We're only testing the stream creation methods at this point.
-      return null;
+      // do nothing
     }
   }
 }

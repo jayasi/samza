@@ -20,12 +20,12 @@
 package org.apache.samza.job.yarn
 
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.samza.config.{Config, JobConfig, YarnConfig}
-import org.apache.samza.coordinator.stream.CoordinatorStreamWriter
+import org.apache.samza.config.{JobConfig, Config, YarnConfig}
+import org.apache.samza.coordinator.stream.{CoordinatorStreamWriter}
 import org.apache.samza.coordinator.stream.messages.SetConfig
 
-import scala.collection.JavaConverters._
-import scala.collection.Map
+import scala.collection.JavaConversions._
+import scala.collection.{Map}
 import scala.collection.mutable.HashMap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -140,8 +140,6 @@ class ClientHelper(conf: Configuration) extends Logging {
       case None =>
     }
 
-    // TODO: remove the customized approach for package resource and use the common one.
-    // But keep it now for backward compatibility.
     // set the local package so that the containers and app master are provisioned with it
     val packageUrl = ConverterUtils.getYarnUrlFromPath(packagePath)
     val fs = packagePath.getFileSystem(conf)
@@ -160,7 +158,7 @@ class ClientHelper(conf: Configuration) extends Logging {
     resource.setVirtualCores(cpu)
     info("set cpu core request to %s for %s" format (cpu, appId.get))
     appCtx.setResource(resource)
-    containerCtx.setCommands(cmds.asJava)
+    containerCtx.setCommands(cmds.toList)
     info("set command to %s for %s" format (cmds, appId.get))
 
     appCtx.setApplicationId(appId.get)
@@ -168,17 +166,6 @@ class ClientHelper(conf: Configuration) extends Logging {
 
     val localResources: HashMap[String, LocalResource] = HashMap[String, LocalResource]()
     localResources += "__package" -> packageResource
-
-
-    // include the resources from the universal resource configurations
-    try {
-      val resourceMapper = new LocalizerResourceMapper(new LocalizerResourceConfig(config), new YarnConfiguration(conf))
-      localResources ++= resourceMapper.getResourceMap.asScala
-    } catch {
-      case e: LocalizerResourceException => {
-        throw new SamzaException("Exception during resource mapping from config. ", e)
-      }
-    }
 
     if (UserGroupInformation.isSecurityEnabled()) {
       validateJobConfig(config)
@@ -200,14 +187,12 @@ class ClientHelper(conf: Configuration) extends Logging {
       coordinatorStreamWriter.stop()
     }
 
-    // prepare all local resources for localizer
-    info("localResources is: %s" format localResources)
-    containerCtx.setLocalResources(localResources.asJava)
+    containerCtx.setLocalResources(localResources)
     info("set local resources on application master for %s" format appId.get)
 
     env match {
       case Some(env) => {
-        containerCtx.setEnvironment(env.asJava)
+        containerCtx.setEnvironment(env)
         info("set environment variables to %s for %s" format (env, appId.get))
       }
       case None =>
@@ -232,8 +217,8 @@ class ClientHelper(conf: Configuration) extends Logging {
   def getApplicationMaster(appId: ApplicationId): Option[ApplicationReport] = {
     yarnClient
       .getApplications
-      .asScala
-      .find(appRep => appId.equals(appRep.getApplicationId))
+      .filter(appRep => appId.equals(appRep.getApplicationId()))
+      .headOption
   }
 
   def getApplicationMasters(status: Option[ApplicationStatus]): List[ApplicationReport] = {
@@ -241,10 +226,9 @@ class ClientHelper(conf: Configuration) extends Logging {
 
     status match {
       case Some(status) => getAppsRsp
-        .asScala
         .filter(appRep => status.equals(convertState(appRep.getYarnApplicationState, appRep.getFinalApplicationStatus).get))
         .toList
-      case None => getAppsRsp.asScala.toList
+      case None => getAppsRsp.toList
     }
   }
 

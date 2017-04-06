@@ -23,10 +23,11 @@ import org.apache.samza.SamzaException
 import org.apache.samza.config.MapConfig
 import org.apache.samza.config.StorageConfig
 import org.apache.samza.metrics.MetricsRegistryMap
+import org.apache.samza.system.SystemStream
 import org.junit.Assert._
 import org.junit.Test
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 class TestKafkaSystemFactory {
   @Test
@@ -35,7 +36,7 @@ class TestKafkaSystemFactory {
     try {
       producerFactory.getProducer(
         "test",
-        new MapConfig(Map[String, String]().asJava),
+        new MapConfig(Map[String, String]()),
         new MetricsRegistryMap)
       fail("Expected to get a Samza exception.")
     } catch {
@@ -48,7 +49,7 @@ class TestKafkaSystemFactory {
   def testFailWhenSerdeIsInvalid {
     val producerFactory = new KafkaSystemFactory
     val config = new MapConfig(Map[String, String](
-      "streams.test.serde" -> "failme").asJava)
+      "streams.test.serde" -> "failme"))
     try {
       producerFactory.getProducer(
         "test",
@@ -69,7 +70,7 @@ class TestKafkaSystemFactory {
       "systems.test.producer.bootstrap.servers" -> "",
       "systems.test.samza.key.serde" -> "json",
       "systems.test.samza.msg.serde" -> "json",
-      "serializers.registry.json.class" -> "samza.serializers.JsonSerdeFactory").asJava)
+      "serializers.registry.json.class" -> "samza.serializers.JsonSerdeFactory"))
     var producer = producerFactory.getProducer(
       "test",
       config,
@@ -90,7 +91,7 @@ class TestKafkaSystemFactory {
       StorageConfig.FACTORY.format("system1") -> "some.factory.Class",
       StorageConfig.CHANGELOG_STREAM.format("system1") -> "system1.stream1",
       StorageConfig.FACTORY.format("system2") -> "some.factory.Class")
-    val config = new MapConfig(configMap.asJava)
+    val config = new MapConfig(configMap)
     assertEquals(Map[String, String](), KafkaSystemFactory.getInjectedProducerProperties("system3", config))
     assertEquals(Map[String, String](), KafkaSystemFactory.getInjectedProducerProperties("system2", config))
     assertEquals(Map[String, String]("compression.type" -> "none"), KafkaSystemFactory.getInjectedProducerProperties("system1", config))

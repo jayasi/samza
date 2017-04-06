@@ -26,7 +26,7 @@ import org.apache.samza.container.TaskName
 import org.apache.samza.system.SystemStreamPartition
 import org.apache.samza.{SamzaException, Partition}
 import org.codehaus.jackson.map.ObjectMapper
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import org.codehaus.jackson.`type`.TypeReference
 
 /**
@@ -68,9 +68,9 @@ class CheckpointSerde extends Serde[Checkpoint] with Logging {
         new SystemStreamPartition(system, stream, new Partition(partition.toInt)) -> offset
       }
 
-      val cpMap = jMap.values.asScala.map(deserializeJSONMap).toMap
+      val cpMap = jMap.values.map(deserializeJSONMap).toMap
 
-      new Checkpoint(cpMap.asJava)
+      return new Checkpoint(cpMap)
     }catch {
       case e : Exception =>
         warn("Exception while deserializing checkpoint: " + e)
@@ -83,7 +83,7 @@ class CheckpointSerde extends Serde[Checkpoint] with Logging {
     val offsets = checkpoint.getOffsets
     val asMap = new util.HashMap[String, util.HashMap[String, String]](offsets.size())
 
-    offsets.asScala.foreach {
+    offsets.foreach {
       case (ssp, offset) =>
         val jMap = new util.HashMap[String, String](4)
         jMap.put("system", ssp.getSystemStream.getSystem)

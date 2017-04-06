@@ -24,7 +24,7 @@ import org.apache.samza.system.{IncomingMessageEnvelope, SystemConsumers, System
 import org.apache.samza.task.ReadableCoordinator
 import org.apache.samza.util.{Logging, Throttleable, ThrottlingExecutor, TimerUtils}
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 /**
  * The run loop uses a single-threaded execution model: activities for
@@ -50,7 +50,7 @@ class RunLoop (
   private var lastCommitNs = clock()
   private var activeNs = 0L
   @volatile private var shutdownNow = false
-  private val coordinatorRequests: CoordinatorRequests = new CoordinatorRequests(taskInstances.keySet.asJava)
+  private val coordinatorRequests: CoordinatorRequests = new CoordinatorRequests(taskInstances.keySet)
 
   // Messages come from the chooser with no connection to the TaskInstance they're bound for.
   // Keep a mapping of SystemStreamPartition to TaskInstance to efficiently route them.
@@ -167,7 +167,7 @@ class RunLoop (
       } else if (!coordinatorRequests.commitRequests.isEmpty){
         trace("Committing due to explicit commit request.")
         metrics.commits.inc
-        coordinatorRequests.commitRequests.asScala.foreach(taskName => {
+        coordinatorRequests.commitRequests.foreach(taskName => {
           taskInstances(taskName).commit
         })
       }

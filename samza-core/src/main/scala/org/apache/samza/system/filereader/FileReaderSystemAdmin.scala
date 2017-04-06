@@ -23,7 +23,7 @@ import org.apache.samza.system.SystemAdmin
 import org.apache.samza.system.SystemStreamMetadata
 import org.apache.samza.system.SystemStreamPartition
 import org.apache.samza.system.SystemStreamMetadata.SystemStreamPartitionMetadata
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import java.io.RandomAccessFile
 import scala.util.control.Breaks
 import org.apache.samza.Partition
@@ -41,7 +41,7 @@ class FileReaderSystemAdmin extends SystemAdmin with Logging {
    * @see getNewestOffsetAndUpcomingOffset(RandomAccessFile)
    */
   def getSystemStreamMetadata(streams: java.util.Set[String]) = {
-    val allMetadata = streams.asScala.map(stream => {
+    val allMetadata = streams.map(stream => {
       val file = new RandomAccessFile(stream, "r")
       val systemStreamPartitionMetadata = file.length match {
         case 0 => new SystemStreamPartitionMetadata(null, null, "0")
@@ -52,13 +52,13 @@ class FileReaderSystemAdmin extends SystemAdmin with Logging {
       }
       file.close
       val streamPartitionMetadata = Map(new Partition(0) -> systemStreamPartitionMetadata)
-      val systemStreamMetadata = new SystemStreamMetadata(stream, streamPartitionMetadata.asJava)
+      val systemStreamMetadata = new SystemStreamMetadata(stream, streamPartitionMetadata)
       (stream, systemStreamMetadata)
     }).toMap
 
     info("Got metadata: %s" format allMetadata)
 
-    allMetadata.asJava
+    allMetadata
   }
 
   /**
@@ -70,7 +70,7 @@ class FileReaderSystemAdmin extends SystemAdmin with Logging {
    * we are supposed to only call this method in fully consumed messages.
    */
   def getOffsetsAfter(offsets: java.util.Map[SystemStreamPartition, String]) = {
-    val offsetAfter = offsets.asScala.map {
+    val offsetAfter = offsets.map {
       case (systemStreamPartition, offset) => {
         val file = new RandomAccessFile(systemStreamPartition.getStream, "r")
         val newOffset = findNextEnter(file, offset.toLong, 1) match {
@@ -80,7 +80,7 @@ class FileReaderSystemAdmin extends SystemAdmin with Logging {
         (systemStreamPartition, newOffset.toString)
       }
     }
-    offsetAfter.asJava
+    mapAsJavaMap(offsetAfter)
   }
 
   /**

@@ -26,6 +26,7 @@ import org.apache.samza.{Partition, SamzaException}
 import org.junit.Assert._
 import org.junit.Test
 
+import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -53,7 +54,7 @@ class TestRangeSystemStreamPartitionMatcher {
       JobConfig.STREAM_JOB_FACTORY_CLASS -> classOf[ThreadJobFactory].getCanonicalName,
       JobConfig.SSP_MATCHER_CLASS -> JobConfig.SSP_MATCHER_CLASS_RANGE,
       JobConfig.SSP_MATCHER_CONFIG_RANGES -> range,
-      (SystemConfig.SYSTEM_FACTORY format "test") -> classOf[MockSystemFactory].getCanonicalName).asJava)
+      (SystemConfig.SYSTEM_FACTORY format "test") -> classOf[MockSystemFactory].getCanonicalName))
   }
 
   @Test
@@ -73,7 +74,7 @@ class TestRangeSystemStreamPartitionMatcher {
   def testFilterWithInvalidMatcherConfigRange() {
     val config = getConfig("--")
 
-    val filteredSet = new RangeSystemStreamPartitionMatcher().filter(sspSet.asJava, config)
+    val filteredSet = new RangeSystemStreamPartitionMatcher().filter(sspSet, config)
     assertEquals(0, filteredSet.size)
   }
 
@@ -81,7 +82,7 @@ class TestRangeSystemStreamPartitionMatcher {
   def testFilterWithMatcherConfigRangeWithNomatches() {
     val config = getConfig("4-5")
 
-    val filteredSet = new RangeSystemStreamPartitionMatcher().filter(sspSet.asJava, config)
+    val filteredSet = new RangeSystemStreamPartitionMatcher().filter(sspSet, config)
     assertEquals(0, filteredSet.size)
   }
 
@@ -89,7 +90,7 @@ class TestRangeSystemStreamPartitionMatcher {
   def testFilterWithEmptyMatcherConfigRange() {
     val config = getConfig("")
 
-    val filteredSet = new RangeSystemStreamPartitionMatcher().filter(sspSet.asJava, config)
+    val filteredSet = new RangeSystemStreamPartitionMatcher().filter(sspSet, config)
     assertEquals(0, filteredSet.size)
   }
 
@@ -100,9 +101,9 @@ class TestRangeSystemStreamPartitionMatcher {
       TaskConfig.INPUT_STREAMS -> "test.stream1",
       JobConfig.STREAM_JOB_FACTORY_CLASS -> classOf[ThreadJobFactory].getCanonicalName,
       JobConfig.SSP_MATCHER_CLASS -> JobConfig.SSP_MATCHER_CLASS_RANGE,
-      (SystemConfig.SYSTEM_FACTORY format "test") -> classOf[MockSystemFactory].getCanonicalName).asJava)
+      (SystemConfig.SYSTEM_FACTORY format "test") -> classOf[MockSystemFactory].getCanonicalName))
 
-    new RangeSystemStreamPartitionMatcher().filter(sspSet.asJava, config)
+    new RangeSystemStreamPartitionMatcher().filter(sspSet, config)
   }
 
 }

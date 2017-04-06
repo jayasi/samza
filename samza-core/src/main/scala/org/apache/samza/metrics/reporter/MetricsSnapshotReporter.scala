@@ -21,7 +21,7 @@ package org.apache.samza.metrics.reporter
 
 import java.util.HashMap
 import java.util.Map
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import org.apache.samza.util.Logging
 import org.apache.samza.metrics.Counter
 import org.apache.samza.metrics.Gauge
@@ -115,10 +115,10 @@ class MetricsSnapshotReporter(
       val metricsMsg = new HashMap[String, Map[String, Object]]
 
       // metrics
-      registry.getGroups.asScala.foreach(group => {
+      registry.getGroups.foreach(group => {
         val groupMsg = new HashMap[String, Object]
 
-        registry.getGroup(group).asScala.foreach {
+        registry.getGroup(group).foreach {
           case (name, metric) =>
             metric.visit(new MetricsVisitor {
               def counter(counter: Counter) = groupMsg.put(name, counter.getCount: java.lang.Long)

@@ -22,7 +22,6 @@ package org.apache.samza.zk;
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.apache.samza.SamzaException;
-import org.apache.samza.coordinator.LeaderElectorListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +42,14 @@ public class ZkControllerImpl implements ZkController {
     this.processorIdStr = processorIdStr;
     this.zkUtils = zkUtils;
     this.zkControllerListener = zkControllerListener;
-    this.leaderElector = new ZkLeaderElector(processorIdStr, zkUtils, debounceTimer);
+    this.leaderElector = new ZkLeaderElector(processorIdStr, zkUtils,
+        new ZkLeaderElector.ZkLeaderElectorListener() {
+          @Override
+          public void onBecomingLeader() {
+            onBecomeLeader();
+          }
+        }
+    );
     this.debounceTimer = debounceTimer;
 
     init();
@@ -70,12 +76,7 @@ public class ZkControllerImpl implements ZkController {
 
     // TODO - make a loop here with some number of attempts.
     // possibly split into two method - becomeLeader() and becomeParticipant()
-    leaderElector.tryBecomeLeader(new LeaderElectorListener() {
-      @Override
-      public void onBecomingLeader() {
-        onBecomeLeader();
-      }
-    });
+    leaderElector.tryBecomeLeader();
 
     // subscribe to JobModel version updates
     zkUtils.subscribeToJobModelVersionChange(new ZkJobModelVersionChangeHandler(debounceTimer));

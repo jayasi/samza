@@ -30,7 +30,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.Assert._
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import org.apache.samza.config.MapConfig
 import org.apache.samza.config.TaskConfig
 import org.apache.samza.config.SystemConfig
@@ -74,13 +74,13 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
     // Construct the expected JobModel, so we can compare it to
     // JobCoordinator's JobModel.
     val container0Tasks = Map(
-      task0Name -> new TaskModel(task0Name, checkpoint0.keySet.asJava, new Partition(4)),
-      task2Name -> new TaskModel(task2Name, checkpoint2.keySet.asJava, new Partition(5)))
+      task0Name -> new TaskModel(task0Name, checkpoint0.keySet, new Partition(4)),
+      task2Name -> new TaskModel(task2Name, checkpoint2.keySet, new Partition(5)))
     val container1Tasks = Map(
-      task1Name -> new TaskModel(task1Name, checkpoint1.keySet.asJava, new Partition(3)))
+      task1Name -> new TaskModel(task1Name, checkpoint1.keySet, new Partition(3)))
     val containers = Map(
-      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks.asJava),
-      Integer.valueOf(1) -> new ContainerModel(1, container1Tasks.asJava))
+      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks),
+      Integer.valueOf(1) -> new ContainerModel(1, container1Tasks))
 
 
     // The test does not pass offsets for task2 (Partition 2) to the checkpointmanager, this will verify that we get an offset 0 for this partition
@@ -111,15 +111,15 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
     // We want the mocksystemconsumer to use the same instance across runs
     MockCoordinatorStreamSystemFactory.enableMockConsumerCache()
 
-    val coordinator = JobModelManager(new MapConfig((config ++ otherConfigs).asJava))
-    val expectedJobModel = new JobModel(new MapConfig(config.asJava), containers.asJava)
+    val coordinator = JobModelManager(new MapConfig(config ++ otherConfigs))
+    val expectedJobModel = new JobModel(new MapConfig(config), containers)
 
     // Verify that the atomicReference is initialized
     assertNotNull(JobModelManager.jobModelRef.get())
     assertEquals(expectedJobModel, JobModelManager.jobModelRef.get())
 
     coordinator.start
-    assertEquals(new MapConfig(config.asJava), coordinator.jobModel.getConfig)
+    assertEquals(new MapConfig(config), coordinator.jobModel.getConfig)
     assertEquals(expectedJobModel, coordinator.jobModel)
 
     // Verify that the JobServlet is serving the correct jobModel
@@ -146,13 +146,13 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
     // Construct the expected JobModel, so we can compare it to
     // JobCoordinator's JobModel.
     val container0Tasks = Map(
-      task0Name -> new TaskModel(task0Name, ssp0.asJava, new Partition(4)),
-      task2Name -> new TaskModel(task2Name, ssp1.asJava, new Partition(5)))
+      task0Name -> new TaskModel(task0Name, ssp0, new Partition(4)),
+      task2Name -> new TaskModel(task2Name, ssp1, new Partition(5)))
     val container1Tasks = Map(
-      task1Name -> new TaskModel(task1Name, ssp1.asJava, new Partition(3)))
+      task1Name -> new TaskModel(task1Name, ssp1, new Partition(3)))
     val containers = Map(
-      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks.asJava),
-      Integer.valueOf(1) -> new ContainerModel(1, container1Tasks.asJava))
+      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks),
+      Integer.valueOf(1) -> new ContainerModel(1, container1Tasks))
 
     val changelogInfo0 = MockCoordinatorStreamWrappedConsumer.CHANGELOGPREFIX + "mock:" + task0Name.getTaskName() -> "4"
 
@@ -177,7 +177,7 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
     MockCoordinatorStreamSystemFactory.enableMockConsumerCache()
 
     // start the job coordinator and verify if it has all the checkpoints through http port
-    val coordinator = JobModelManager(new MapConfig((config ++ otherConfigs).asJava))
+    val coordinator = JobModelManager(new MapConfig(config ++ otherConfigs))
     coordinator.start
     val url = coordinator.server.getUrl.toString
 
@@ -209,10 +209,12 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
     val task1Name = new TaskName("Partition 1")
     val task2Name = new TaskName("Partition 2")
     val container0Tasks = Map(
-      task1Name -> new TaskModel(task1Name, Set(new SystemStreamPartition("test", "stream1", new Partition(1))).asJava, new Partition(0)))
+      task1Name -> new TaskModel(task1Name, Set(new SystemStreamPartition("test", "stream1", new Partition(1))), new Partition(0)))
+    val container1Tasks = Map(
+      task2Name -> new TaskModel(task2Name, Set(new SystemStreamPartition("test", "stream1", new Partition(2))), new Partition(5)))
     val containers = Map(
-      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks.asJava))
-    val jobModel = new JobModel(config, containers.asJava)
+      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks))
+    val jobModel = new JobModel(config, containers)
     assertEquals(config, coordinator.jobModel.getConfig)
     assertEquals(jobModel, coordinator.jobModel)
   }
@@ -230,11 +232,11 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
     val task1Name = new TaskName("Partition 1")
 
     val container0Tasks = Map(
-      task1Name -> new TaskModel(task1Name, Set(new SystemStreamPartition("test", "stream1", new Partition(1))).asJava, new Partition(0)))
+      task1Name -> new TaskModel(task1Name, Set(new SystemStreamPartition("test", "stream1", new Partition(1))), new Partition(0)))
 
     val containers = Map(
-      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks.asJava))
-    val jobModel = new JobModel(config, containers.asJava)
+      Integer.valueOf(0) -> new ContainerModel(0, container0Tasks))
+    val jobModel = new JobModel(config, containers)
     assertEquals(config, coordinator.jobModel.getConfig)
     assertEquals(jobModel, coordinator.jobModel)
   }
@@ -277,13 +279,13 @@ class TestJobCoordinator extends FlatSpec with PrivateMethodTester {
       JobConfig.SSP_MATCHER_CLASS -> JobConfig.SSP_MATCHER_CLASS_REGEX,
       JobConfig.SSP_MATCHER_CONFIG_REGEX -> "[1]",
       SystemConfig.SYSTEM_FACTORY.format("test") -> classOf[MockSystemFactory].getCanonicalName,
-      SystemConfig.SYSTEM_FACTORY.format("coordinator") -> classOf[MockCoordinatorStreamSystemFactory].getName).asJava)
+      SystemConfig.SYSTEM_FACTORY.format("coordinator") -> classOf[MockCoordinatorStreamSystemFactory].getName))
     config
   }
 
   def extractChangelogPartitionMapping(url : String) = {
     val jobModel = SamzaContainer.readJobModel(url.toString)
-    val taskModels = jobModel.getContainers.values().asScala.flatMap(_.getTasks.values().asScala)
+    val taskModels = jobModel.getContainers.values().flatMap(_.getTasks.values())
     taskModels.map{taskModel => {
       taskModel.getTaskName -> taskModel.getChangelogPartition.getPartitionId
     }}.toMap
@@ -316,7 +318,7 @@ class MockSystemAdmin extends ExtendedSystemAdmin {
       new Partition(1) -> new SystemStreamPartitionMetadata(null, null, null),
       // Create a new Partition(2), which wasn't in the prior changelog mapping.
       new Partition(2) -> new SystemStreamPartitionMetadata(null, null, null))
-    Map(streamNames.asScala.toList.head -> new SystemStreamMetadata("foo", partitionMetadata.asJava)).asJava
+    Map(streamNames.toList.head -> new SystemStreamMetadata("foo", partitionMetadata))
   }
 
   override def createChangelogStream(topicName: String, numOfChangeLogPartitions: Int) {
@@ -336,16 +338,16 @@ class MockSystemAdmin extends ExtendedSystemAdmin {
   override def getSystemStreamPartitionCounts(streamNames: util.Set[String],
                                               cacheTTL: Long): util.Map[String, SystemStreamMetadata] = {
     assertEquals(1, streamNames.size())
-    val result = streamNames.asScala.map {
+    val result = streamNames.map {
       stream =>
         val partitionMetadata = Map(
           new Partition(0) -> new SystemStreamPartitionMetadata("", "", ""),
           new Partition(1) -> new SystemStreamPartitionMetadata("", "", ""),
           new Partition(2) -> new SystemStreamPartitionMetadata("", "", "")
         )
-        stream -> new SystemStreamMetadata(stream, partitionMetadata.asJava)
+        stream -> new SystemStreamMetadata(stream, partitionMetadata)
     }.toMap
-    result.asJava
+    result
   }
 
   override def getNewestOffset(ssp: SystemStreamPartition, maxRetries: Integer) = null

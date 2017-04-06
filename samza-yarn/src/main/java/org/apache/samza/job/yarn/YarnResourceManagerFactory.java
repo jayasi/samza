@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.samza.job.yarn;
 
 import org.apache.samza.clustermanager.ClusterResourceManager;

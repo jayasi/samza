@@ -24,7 +24,7 @@ import java.io.File
 
 import org.apache.samza.config.ShellCommandConfig
 import org.apache.samza.config.ShellCommandConfig.Config2ShellCommand
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 class ShellCommandBuilder extends CommandBuilder {
   def buildCommand() = {
@@ -45,6 +45,6 @@ class ShellCommandBuilder extends CommandBuilder {
       case None => envMap
     }
 
-    envMapWithJavaHome.asJava
+    envMapWithJavaHome
   }
 }

@@ -23,6 +23,7 @@ import java.io.File
 import java.nio.file.Path
 import java.util
 import java.util.concurrent.{CountDownLatch, ExecutorService, Executors, TimeUnit}
+import java.lang.Thread.UncaughtExceptionHandler
 import java.net.{URL, UnknownHostException}
 
 import org.apache.samza.SamzaException
@@ -75,11 +76,54 @@ import org.apache.samza.util.SystemClock
 import org.apache.samza.util.Util
 import org.apache.samza.util.Util.asScalaClock
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 object SamzaContainer extends Logging {
   val DEFAULT_READ_JOBMODEL_DELAY_MS = 100
   val DISK_POLL_INTERVAL_KEY = "container.disk.poll.interval.ms"
+
+  def main(args: Array[String]) {
+    safeMain(() => new JmxServer, new SamzaContainerExceptionHandler(() => System.exit(1)))
+  }
+
+  def safeMain(
+    newJmxServer: () => JmxServer,
+    exceptionHandler: UncaughtExceptionHandler = null) {
+    if (exceptionHandler != null) {
+      Thread.setDefaultUncaughtExceptionHandler(exceptionHandler)
+    }
+    putMDC("containerName", "samza-container-" + System.getenv(ShellCommandConfig.ENV_CONTAINER_ID))
+    // Break out the main method to make the JmxServer injectable so we can
+    // validate that we don't leak JMX non-daemon threads if we have an
+    // exception in the main method.
+    val containerId = System.getenv(ShellCommandConfig.ENV_CONTAINER_ID).toInt
+    logger.info("Got container ID: %s" format containerId)
+    val coordinatorUrl = System.getenv(ShellCommandConfig.ENV_COORDINATOR_URL)
+    logger.info("Got coordinator URL: %s" format coordinatorUrl)
+    val jobModel = readJobModel(coordinatorUrl)
+    val containerModel = jobModel.getContainers()(containerId.toInt)
+    val config = jobModel.getConfig
+    putMDC("jobName", config.getName.getOrElse(throw new SamzaException("can not find the job name")))
+    putMDC("jobId", config.getJobId.getOrElse("1"))
+    var jmxServer: JmxServer = null
+
+    try {
+      jmxServer = newJmxServer()
+      val containerModel = jobModel.getContainers.get(containerId.toInt)
+      // TODO: add actual local runner in a container to the parameters
+      SamzaContainer(
+        containerId.toInt,
+        containerModel,
+        config,
+        jobModel.maxChangeLogStreamPartitions,
+        getLocalityManager(containerId, config),
+        jmxServer).run
+    } finally {
+      if (jmxServer != null) {
+        jmxServer.stop
+      }
+    }
+  }
 
   def getLocalityManager(containerId: Int, config: Config): LocalityManager = {
     val containerName = getSamzaContainerName(containerId)
@@ -120,7 +164,9 @@ object SamzaContainer extends Logging {
     localityManager: LocalityManager,
     jmxServer: JmxServer,
     customReporters: Map[String, MetricsReporter] = Map[String, MetricsReporter](),
-    taskFactory: Object) = {
+    taskFactory: Object = null,
+    // SAMZA-1137: need to instantiate the ApplicationRunner in the container local JVM and pass it in
+    appRunner: ApplicationRunner = null) = {
     val containerName = getSamzaContainerName(containerId)
     val containerPID = Util.getContainerPID
 
@@ -148,8 +194,7 @@ object SamzaContainer extends Logging {
     val inputSystemStreamPartitions = containerModel
       .getTasks
       .values
-      .asScala
-      .flatMap(_.getSystemStreamPartitions.asScala)
+      .flatMap(_.getSystemStreamPartitions)
       .toSet
 
     val inputSystemStreams = inputSystemStreamPartitions
@@ -319,7 +364,7 @@ object SamzaContainer extends Logging {
 
     info("Setting up metrics reporters.")
 
-    val reporters = MetricsReporterLoader.getMetricsReporters(config, containerName).asScala.toMap
+    val reporters = MetricsReporterLoader.getMetricsReporters(config, containerName).toMap
 
     info("Got metrics reporters: %s" format reporters.keys)
 
@@ -401,8 +446,11 @@ object SamzaContainer extends Logging {
     else
       null
 
+    val taskFactoryInstance = Option(taskFactory)
+      .getOrElse(TaskFactoryUtil.fromTaskClassConfig(config, appRunner))
+
     val finalTaskFactory = TaskFactoryUtil.finalizeTaskFactory(
-      taskFactory,
+      taskFactoryInstance,
       singleThreadMode,
       taskThreadPool)
 
@@ -410,10 +458,9 @@ object SamzaContainer extends Logging {
     val taskNames = containerModel
       .getTasks
       .values
-      .asScala
       .map(_.getTaskName)
       .toSet
-    val containerContext = new SamzaContainerContext(containerId, config, taskNames.asJava)
+    val containerContext = new SamzaContainerContext(containerId, config, taskNames)
 
     // TODO not sure how we should make this config based, or not. Kind of
     // strange, since it has some dynamic directories when used with YARN.
@@ -423,7 +470,7 @@ object SamzaContainer extends Logging {
     val storeWatchPaths = new util.HashSet[Path]()
     storeWatchPaths.add(defaultStoreBaseDir.toPath)
 
-    val taskInstances: Map[TaskName, TaskInstance] = containerModel.getTasks.values.asScala.map(taskModel => {
+    val taskInstances: Map[TaskName, TaskInstance] = containerModel.getTasks.values.map(taskModel => {
       debug("Setting up task instance: %s" format taskModel)
 
       val taskName = taskModel.getTaskName
@@ -527,7 +574,6 @@ object SamzaContainer extends Logging {
 
       val systemStreamPartitions = taskModel
         .getSystemStreamPartitions
-        .asScala
         .toSet
 
       info("Retrieved SystemStreamPartitions " + systemStreamPartitions + " for " + taskName)
@@ -772,7 +818,7 @@ class SamzaContainer(
       taskInstance.startStores
       // Measuring the time to restore the stores
       val timeToRestore = System.currentTimeMillis() - startTime
-      val taskGauge = metrics.taskStoreRestorationMetrics.asScala.getOrElse(taskInstance.taskName, null)
+      val taskGauge = metrics.taskStoreRestorationMetrics.getOrElse(taskInstance.taskName, null)
       if (taskGauge != null) {
         taskGauge.set(timeToRestore)
       }

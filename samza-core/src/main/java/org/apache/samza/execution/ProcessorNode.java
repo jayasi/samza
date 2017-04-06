@@ -35,38 +35,26 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A JobNode is a physical execution unit. In RemoteExecutionEnvironment, it's a job that will be submitted
+ * A ProcessorNode is a physical execution unit. In RemoteExecutionEnvironment, it's a job that will be submitted
  * to remote cluster. In LocalExecutionEnvironment, it's a set of StreamProcessors for local execution.
- * A JobNode contains the input/output, and the configs for physical execution.
+ * A ProcessorNode contains the input/output, and the configs for physical execution.
  */
-public class JobNode {
-  private static final Logger log = LoggerFactory.getLogger(JobNode.class);
-  private static final String CONFIG_JOB_PREFIX = "jobs.%s.";
+public class ProcessorNode {
+  private static final Logger log = LoggerFactory.getLogger(ProcessorNode.class);
+  private static final String CONFIG_PROCESSOR_PREFIX = "processors.%s.";
 
-  private final String jobName;
-  private final String jobId;
   private final String id;
   private final List<StreamEdge> inEdges = new ArrayList<>();
   private final List<StreamEdge> outEdges = new ArrayList<>();
   private final Config config;
 
-  JobNode(String jobName, String jobId, Config config) {
-    this.jobName = jobName;
-    this.jobId = jobId;
-    this.id = createId(jobName, jobId);
+  ProcessorNode(String id, Config config) {
+    this.id = id;
     this.config = config;
   }
 
   public  String getId() {
     return id;
-  }
-
-  public String getJobName() {
-    return jobName;
-  }
-
-  public String getJobId() {
-    return jobId;
   }
 
   void addInEdge(StreamEdge in) {
@@ -87,22 +75,22 @@ public class JobNode {
 
   public Config generateConfig() {
     Map<String, String> configs = new HashMap<>();
-    configs.put(JobConfig.JOB_NAME(), jobName);
+    configs.put(JobConfig.JOB_NAME(), id);
 
     List<String> inputs = inEdges.stream().map(edge -> edge.getFormattedSystemStream()).collect(Collectors.toList());
     configs.put(TaskConfig.INPUT_STREAMS(), Joiner.on(',').join(inputs));
-    log.info("Job {} has generated configs {}", jobName, configs);
+    log.info("Processor {} has generated configs {}", id, configs);
 
-    String configPrefix = String.format(CONFIG_JOB_PREFIX, jobName);
-    // TODO: Disallow user specifying job inputs/outputs. This info comes strictly from the pipeline.
+    String configPrefix = String.format(CONFIG_PROCESSOR_PREFIX, id);
+    // TODO: Disallow user specifying processor inputs/outputs. This info comes strictly from the pipeline.
     return Util.rewriteConfig(extractScopedConfig(config, new MapConfig(configs), configPrefix));
   }
 
   /**
    * This function extract the subset of configs from the full config, and use it to override the generated configs
-   * from the job.
+   * from the processor.
    * @param fullConfig full config
-   * @param generatedConfig config generated for the job
+   * @param generatedConfig config generated from the processor
    * @param configPrefix prefix to extract the subset of the config overrides
    * @return config that merges the generated configs and overrides
    */
@@ -124,9 +112,5 @@ public class JobNode {
     log.debug("Prefix '{}' has merged config {}", configPrefix, scopedConfig);
 
     return scopedConfig;
-  }
-
-  static String createId(String jobName, String jobId) {
-    return String.format("%s-%s", jobName, jobId);
   }
 }

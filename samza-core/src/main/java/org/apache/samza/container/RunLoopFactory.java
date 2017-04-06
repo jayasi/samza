@@ -26,7 +26,7 @@ import org.apache.samza.task.AsyncRunLoop;
 import org.apache.samza.util.HighResolutionClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.collection.JavaConverters;
+import scala.collection.JavaConversions;
 import scala.runtime.AbstractFunction1;
 
 import java.util.concurrent.ExecutorService;
@@ -98,7 +98,7 @@ public class RunLoopFactory {
       log.info("Run loop in asynchronous mode.");
 
       return new AsyncRunLoop(
-        JavaConverters.mapAsJavaMapConverter(taskInstances).asJava(),
+        JavaConversions.mapAsJavaMap(taskInstances),
         threadPool,
         consumerMultiplexer,
         taskMaxConcurrency,

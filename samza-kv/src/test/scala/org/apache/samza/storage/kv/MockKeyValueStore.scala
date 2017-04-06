@@ -19,7 +19,7 @@
 
 package org.apache.samza.storage.kv
 
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import java.util
 
 /**
@@ -36,7 +36,7 @@ class MockKeyValueStore extends KeyValueStore[String, String] {
   }
 
   override def putAll(entries: java.util.List[Entry[String, String]]) {
-    for (entry <- entries.asScala) {
+    for (entry <- entries) {
       kvMap.put(entry.getKey, entry.getValue)
     }
   }

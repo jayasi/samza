@@ -21,7 +21,7 @@ package org.apache.samza.metrics
 
 import java.lang.management.ManagementFactory
 import scala.collection._
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import java.lang.Thread.State._
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -97,7 +97,7 @@ class JvmMetrics(val registry: MetricsRegistry) extends MetricsHelper with Runna
     var count = 0l
     var timeMillis = 0l
 
-    gcBeans.asScala.foreach(gcBean => {
+    gcBeans.foreach(gcBean => {
       val c = gcBean.getCollectionCount()
       val t = gcBean.getCollectionTime()
       val gcInfo = getGcInfo(gcBean.getName)

@@ -21,7 +21,9 @@ package org.apache.samza.system.filereader
 
 import java.io.PrintWriter
 import java.io.File
+import java.io.RandomAccessFile
 
+import org.apache.samza.SamzaException
 import org.apache.samza.system.SystemStreamPartition
 import org.apache.samza.Partition
 import org.apache.samza.system.SystemStreamMetadata.SystemStreamPartitionMetadata
@@ -32,7 +34,7 @@ import org.junit.After
 import org.scalatest.junit.AssertionsForJUnit
 
 import scala.collection.mutable.HashMap
-import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 class TestFileReaderSystemAdmin extends AssertionsForJUnit {
 
@@ -68,7 +70,7 @@ class TestFileReaderSystemAdmin extends AssertionsForJUnit {
     val ssp5 = new SystemStreamPartition("file-reader", files(4), new Partition(0))
 
     val offsets: java.util.Map[SystemStreamPartition, String] =
-      HashMap(ssp3 -> "0", ssp4 -> "12", ssp5 -> "25").asJava
+      HashMap(ssp3 -> "0", ssp4 -> "12", ssp5 -> "25")
     val afterOffsets = fileReaderSystemAdmin.getOffsetsAfter(offsets)
     assertEquals("12", afterOffsets.get(ssp3))
     assertEquals("25", afterOffsets.get(ssp4))
@@ -78,14 +80,14 @@ class TestFileReaderSystemAdmin extends AssertionsForJUnit {
   @Test
   def testGetSystemStreamMetadata {
     val fileReaderSystemAdmin = new FileReaderSystemAdmin
-    val allMetadata = fileReaderSystemAdmin.getSystemStreamMetadata(setAsJavaSetConverter(files.toSet).asJava)
+    val allMetadata = fileReaderSystemAdmin.getSystemStreamMetadata(setAsJavaSet(files.toSet))
     val expectedEmpty = new SystemStreamPartitionMetadata(null, null, "0")
     val expectedNoEntry = new SystemStreamPartitionMetadata("0", "0", "0")
     val expectedOneEntry = new SystemStreamPartitionMetadata("0", "0", "12")
     val expectedTwoEntry = new SystemStreamPartitionMetadata("0", "12", "25")
     val expectedMoreEntry = new SystemStreamPartitionMetadata("0", "37", "50")
 
-    allMetadata.asScala.foreach { entry =>
+    allMetadata.foreach { entry =>
       {
         val result = (entry._2).getSystemStreamPartitionMetadata().get(new Partition(0))
         entry._1 match {
