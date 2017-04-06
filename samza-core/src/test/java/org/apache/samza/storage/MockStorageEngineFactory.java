@@ -24,7 +24,7 @@ import java.io.File;
 import org.apache.samza.container.SamzaContainerContext;
 import org.apache.samza.metrics.MetricsRegistry;
 import org.apache.samza.serializers.Serde;
-import org.apache.samza.system.SystemStream;
+
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.task.MessageCollector;
 
@@ -32,7 +32,7 @@ public class MockStorageEngineFactory implements StorageEngineFactory<Object, Ob
   @Override
   public StorageEngine getStorageEngine(String storeName, File storeDir, Serde<Object> keySerde, Serde<Object> msgSerde,
       MessageCollector collector, MetricsRegistry registry, SystemStreamPartition changeLogSystemStreamPartition,
-      SystemStream profilingStream, SamzaContainerContext containerContext) {
+      SystemStreamPartition profilingStream, SamzaContainerContext containerContext) {
     StoreProperties storeProperties = new StoreProperties.StorePropertiesBuilder().setLoggedStore(true).build();
     return new MockStorageEngine(storeName, storeDir, changeLogSystemStreamPartition, storeProperties);
   }
