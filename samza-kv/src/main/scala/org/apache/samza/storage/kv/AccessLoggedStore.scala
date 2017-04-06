@@ -23,24 +23,13 @@ import java.util
 
 import org.apache.samza.task.MessageCollector
 import org.apache.samza.util.Logging
-import org.apache.samza.system.OutgoingMessageEnvelope
-import org.apache.samza.system.SystemStream
+import org.apache.samza.system.{OutgoingMessageEnvelope, SystemStreamPartition}
 import org.apache.samza.serializers._
 
 class AccessLoggedStore[K, V](
-                               val store: KeyValueStore[K, V],
-                               val collector: MessageCollector,
-                               val profilingSystemStream: SystemStream,
-                               keySerde: Serde[K],
-                               msgSerde: Serde[V])
-  extends KeyValueStore[K, V] with Logging {
-
-  var addHeader = 0 ;
-
-  def addheader() = {
-    var msg = "operation, key, keySize, value, valueSize, latency, time" ;
-    collector.send(new OutgoingMessageEnvelope(profilingSystemStream, msg)) ;
-  }
+    val store: KeyValueStore[K, V],
+    val collector: MessageCollector,
+    val profilingSystemStreamPartition: SystemStreamPartition) extends KeyValueStore[K, V] with Logging {
 
   object DBOperations extends Enumeration {
     type DBOperations = Value
@@ -49,8 +38,14 @@ class AccessLoggedStore[K, V](
     val DELETE = Value("delete")
   }
 
+  var addHeader = 0
+  val HEADER_INTERVAL = 100
+  val systemStream = profilingSystemStreamPartition.getSystemStream
+  val partitionId = profilingSystemStreamPartition.getPartition.getPartitionId
+
+
   def get(key: K): V = {
-    var toPrint = "read, " + key + ", " +  size(key, keySerde)
+    var toPrint = "read, " + key
     measureLatencyAndWriteToStream(DBOperations.READ, toPrint, store.get(key))
   }
 
@@ -59,7 +54,7 @@ class AccessLoggedStore[K, V](
   }
 
   def put(key: K, value: V): Unit = {
-    var toPrint = "write,"  + key + ", " + size(key, keySerde) + ", "  + value + ", " + size(value, msgSerde);
+    var toPrint = "write,"  + key + ", " + value
     measureLatencyAndWriteToStream(DBOperations.WRITE, toPrint, store.put(key, value))
   }
 
@@ -70,7 +65,7 @@ class AccessLoggedStore[K, V](
 
 
   def delete(key: K): Unit = {
-    var toPrint = "delete, " + key + ", " + size(key, keySerde) ;
+    var toPrint = "delete, " + key
     measureLatencyAndWriteToStream(DBOperations.DELETE, toPrint, store.delete(key))
   }
 
@@ -107,29 +102,33 @@ class AccessLoggedStore[K, V](
     bytes.size
   }
 
-  def measureLatencyAndWriteToStream[R](operation: DBOperations.Value, message: String, block: => R):R = {
-    val time1 = System.nanoTime() ;
+  private def addheader() = {
+    var msg = "operation, key, value, latency, time" ;
+    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, msg))
+  }
+
+
+  private def measureLatencyAndWriteToStream[R](operation: DBOperations.Value, message: String, block: => R):R = {
+    val time1 = System.nanoTime()
     val result = block
     val time2 = System.nanoTime()
-    val latency = time2 - time1 ;
-    var msg = message ;
+    val latency = time2 - time1
+    var msg = message
 
     if(operation == DBOperations.READ) {
-      msg += ", " + result + ", " + size(result.asInstanceOf[V], msgSerde)
+      msg += ", " + result
     } else if (operation == DBOperations.DELETE) {
       msg += ", , "
     }
 
-    msg += ", " + latency + ", " + System.nanoTime();
-    if (addHeader %100 == 0) {
-      addheader() ;
-      addHeader = 0;
+    msg += ", " + latency + ", " + System.nanoTime()
+    if (addHeader %HEADER_INTERVAL == 0) {
+      addheader()
+      addHeader = 0
     }
-    addHeader += 1;
-    collector.send(new OutgoingMessageEnvelope(profilingSystemStream, msg))
+    addHeader += 1
+    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, msg))
     result
   }
-
-
 
 }
