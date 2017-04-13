@@ -20,7 +20,6 @@
 package org.apache.samza.storage.kv
 
 import java.util
-
 import org.apache.samza.task.MessageCollector
 import org.apache.samza.util.Logging
 import org.apache.samza.system.{OutgoingMessageEnvelope, SystemStreamPartition}
@@ -38,10 +37,11 @@ class AccessLoggedStore[K, V](
     val DELETE = Value("delete")
   }
 
-  var addHeader = 0
+  var interval = 0
   val HEADER_INTERVAL = 100
   val systemStream = profilingSystemStreamPartition.getSystemStream
   val partitionId = profilingSystemStreamPartition.getPartition.getPartitionId
+  val serializer = new StringSerde("UTF-8")
 
 
   def get(key: K): V = {
@@ -102,9 +102,10 @@ class AccessLoggedStore[K, V](
     bytes.size
   }
 
-  private def addheader() = {
-    var msg = "operation, key, value, latency, time" ;
-    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, msg))
+  private def addHeader() = {
+    val msg = "operation, key, value, latency, time"
+    val timeStamp = System.nanoTime().toString
+    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, serializer.toBytes(timeStamp), serializer.toBytes(msg)))
   }
 
 
@@ -114,6 +115,7 @@ class AccessLoggedStore[K, V](
     val time2 = System.nanoTime()
     val latency = time2 - time1
     var msg = message
+    val timeStamp = System.nanoTime().toString
 
     if(operation == DBOperations.READ) {
       msg += ", " + result
@@ -121,13 +123,14 @@ class AccessLoggedStore[K, V](
       msg += ", , "
     }
 
-    msg += ", " + latency + ", " + System.nanoTime()
-    if (addHeader %HEADER_INTERVAL == 0) {
-      addheader()
-      addHeader = 0
+    if (interval %HEADER_INTERVAL == 0) {
+      addHeader()
+      interval = 0
     }
-    addHeader += 1
-    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, msg))
+
+    interval += 1
+    msg += ", " + latency + ", " + timeStamp
+    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, serializer.toBytes(timeStamp), serializer.toBytes(msg)))
     result
   }
 
