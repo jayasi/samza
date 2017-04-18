@@ -28,7 +28,7 @@ import org.apache.samza.serializers._
 class AccessLoggedStore[K, V](
     val store: KeyValueStore[K, V],
     val collector: MessageCollector,
-    val profilingSystemStreamPartition: SystemStreamPartition) extends KeyValueStore[K, V] with Logging {
+    val accessLogSystemStreamPartition: SystemStreamPartition) extends KeyValueStore[K, V] with Logging {
 
   object DBOperations extends Enumeration {
     type DBOperations = Value
@@ -39,14 +39,14 @@ class AccessLoggedStore[K, V](
 
   var interval = 0
   val HEADER_INTERVAL = 100
-  val systemStream = profilingSystemStreamPartition.getSystemStream
-  val partitionId = profilingSystemStreamPartition.getPartition.getPartitionId
+  val systemStream = accessLogSystemStreamPartition.getSystemStream
+  val partitionId = accessLogSystemStreamPartition.getPartition.getPartitionId
   val serializer = new StringSerde("UTF-8")
 
 
   def get(key: K): V = {
-    var toPrint = "read, " + key
-    measureLatencyAndWriteToStream(DBOperations.READ, toPrint, store.get(key))
+    var message = DBOperations.READ + ", " + key
+    measureLatencyAndWriteToStream(message, store.get(key))
   }
 
   def getAll(keys: util.List[K]): util.Map[K, V] = {
@@ -54,8 +54,8 @@ class AccessLoggedStore[K, V](
   }
 
   def put(key: K, value: V): Unit = {
-    var toPrint = "write,"  + key + ", " + value
-    measureLatencyAndWriteToStream(DBOperations.WRITE, toPrint, store.put(key, value))
+    var message = DBOperations.WRITE + ","  + key
+    measureLatencyAndWriteToStream(message, store.put(key, value))
   }
 
   def putAll(entries: util.List[Entry[K, V]]): Unit = {
@@ -65,8 +65,8 @@ class AccessLoggedStore[K, V](
 
 
   def delete(key: K): Unit = {
-    var toPrint = "delete, " + key
-    measureLatencyAndWriteToStream(DBOperations.DELETE, toPrint, store.delete(key))
+    var message = DBOperations.DELETE  + ", " + key
+    measureLatencyAndWriteToStream(message, store.delete(key))
   }
 
   def deleteAll(keys: util.List[K]): Unit = {
@@ -103,25 +103,19 @@ class AccessLoggedStore[K, V](
   }
 
   private def addHeader() = {
-    val msg = "operation, key, value, latency, time"
+    val header = "operation, key, latency, time"
     val timeStamp = System.nanoTime().toString
-    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, serializer.toBytes(timeStamp), serializer.toBytes(msg)))
+    collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, serializer.toBytes(timeStamp), serializer.toBytes(header)))
   }
 
 
-  private def measureLatencyAndWriteToStream[R](operation: DBOperations.Value, message: String, block: => R):R = {
+  private def measureLatencyAndWriteToStream[R](message: String, block: => R):R = {
     val time1 = System.nanoTime()
     val result = block
     val time2 = System.nanoTime()
     val latency = time2 - time1
     var msg = message
     val timeStamp = System.nanoTime().toString
-
-    if(operation == DBOperations.READ) {
-      msg += ", " + result
-    } else if (operation == DBOperations.DELETE) {
-      msg += ", , "
-    }
 
     if (interval %HEADER_INTERVAL == 0) {
       addHeader()

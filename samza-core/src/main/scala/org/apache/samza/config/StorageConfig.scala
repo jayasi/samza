@@ -68,11 +68,11 @@ class StorageConfig(config: Config) extends ScalaMapConfig(config) with Logging 
   }
 
   def getAccessLogStream(name: String) = {
-    //Looking for the profiling stream similar to the change log stream
+    //Looking for the access log stream similar to the change log stream
     val systemStream = getOption(ACCESSLOG_STREAM format name)
     val systemStreamRes =
       if (systemStream.isDefined && ! systemStream.getOrElse("").contains('.')) {
-          throw new SamzaException("profiling system is not defined " + systemStream.get)
+          throw new SamzaException("accesslog system is not defined " + systemStream.get)
       } else {
         systemStream
       }

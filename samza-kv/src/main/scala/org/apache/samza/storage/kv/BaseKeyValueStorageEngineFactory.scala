@@ -131,14 +131,14 @@ trait BaseKeyValueStorageEngineFactory[K, V] extends StorageEngineFactory[K, V] 
       serialized
     }
 
-    val maybeProfiler = if (accessLogSystemStreamPartition != null) {
+    val maybeAccessLoggedStore = if (accessLogSystemStreamPartition != null) {
       new AccessLoggedStore(maybeCachedStore, collector, accessLogSystemStreamPartition)
     } else {
       maybeCachedStore
     }
 
     // wrap with null value checking
-    val nullSafeStore = new NullSafeKeyValueStore(maybeProfiler)
+    val nullSafeStore = new NullSafeKeyValueStore(maybeAccessLoggedStore)
 
     // create the storage engine and return
     // TODO: Decide if we should use raw bytes when restoring

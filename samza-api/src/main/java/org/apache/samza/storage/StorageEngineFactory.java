@@ -43,7 +43,7 @@ public interface StorageEngineFactory<K, V> {
    * @param collector MessageCollector the storage engine uses to persist changes.
    * @param registry MetricsRegistry to which to publish storage-engine specific metrics.
    * @param changeLogSystemStreamPartition Samza stream partition from which to receive the changelog.
-   * @param accessLogSystemsStreamPartition Information about the profiling stream
+   * @param accessLogSystemsStreamPartition Information about the accesslog stream
    * @param containerContext Information about the container in which the task is executing.
    * @return The storage engine instance.
    */
