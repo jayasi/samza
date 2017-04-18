@@ -32,7 +32,7 @@ public class MockStorageEngineFactory implements StorageEngineFactory<Object, Ob
   @Override
   public StorageEngine getStorageEngine(String storeName, File storeDir, Serde<Object> keySerde, Serde<Object> msgSerde,
       MessageCollector collector, MetricsRegistry registry, SystemStreamPartition changeLogSystemStreamPartition,
-      SystemStreamPartition profilingStream, SamzaContainerContext containerContext) {
+      SystemStreamPartition accessLogSystemStreamPartition, SamzaContainerContext containerContext) {
     StoreProperties storeProperties = new StoreProperties.StorePropertiesBuilder().setLoggedStore(true).build();
     return new MockStorageEngine(storeName, storeDir, changeLogSystemStreamPartition, storeProperties);
   }
