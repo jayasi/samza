@@ -20,12 +20,12 @@
 package org.apache.samza.system
 
 
+import java.util
 import java.util.concurrent.TimeUnit
-
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import org.apache.samza.serializers.SerdeManager
 import org.apache.samza.util.{Logging, TimerUtils}
-import org.apache.samza.system.chooser.{DefaultChooser, MessageChooser}
+import org.apache.samza.system.chooser.MessageChooser
 import org.apache.samza.SamzaException
 import java.util.ArrayDeque
 import java.util.HashSet
@@ -152,10 +152,11 @@ class SystemConsumers (
 
   def start {
     debug("Starting consumers.")
-    emptySystemStreamPartitionsBySystem ++= unprocessedMessagesBySSP
+    emptySystemStreamPartitionsBySystem.asScala ++= unprocessedMessagesBySSP
       .keySet
+      .asScala
       .groupBy(_.getSystem)
-      .mapValues(systemStreamPartitions => new HashSet(systemStreamPartitions.toSeq))
+      .mapValues(systemStreamPartitions => new util.HashSet(systemStreamPartitions.toSeq.asJava))
 
     consumers
       .keySet
@@ -330,11 +331,11 @@ class SystemConsumers (
       val deserializedEnvelope = try {
         Some(serdeManager.fromBytes(rawEnvelope))
       } catch {
-        case e: Exception if !dropDeserializationError =>
+        case e: Throwable if !dropDeserializationError =>
           throw new SystemConsumersException(
             "Cannot deserialize an incoming message for %s"
               .format(systemStreamPartition.getSystemStream.toString), e)
-        case ex: Exception =>
+        case ex: Throwable =>
           debug("Cannot deserialize an incoming message for %s. Dropping the error message."
                 .format(systemStreamPartition.getSystemStream.toString), ex)
           metrics.deserializationError.inc

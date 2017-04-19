@@ -20,12 +20,12 @@
 package org.apache.samza.job.yarn
 
 import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.samza.config.{JobConfig, Config, YarnConfig}
-import org.apache.samza.coordinator.stream.{CoordinatorStreamWriter}
+import org.apache.samza.config.{Config, JobConfig, YarnConfig}
+import org.apache.samza.coordinator.stream.CoordinatorStreamWriter
 import org.apache.samza.coordinator.stream.messages.SetConfig
 
-import scala.collection.JavaConversions._
-import scala.collection.{Map}
+import scala.collection.JavaConverters._
+import scala.collection.Map
 import scala.collection.mutable.HashMap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -140,6 +140,8 @@ class ClientHelper(conf: Configuration) extends Logging {
       case None =>
     }
 
+    // TODO: remove the customized approach for package resource and use the common one.
+    // But keep it now for backward compatibility.
     // set the local package so that the containers and app master are provisioned with it
     val packageUrl = ConverterUtils.getYarnUrlFromPath(packagePath)
     val fs = packagePath.getFileSystem(conf)
@@ -158,7 +160,7 @@ class ClientHelper(conf: Configuration) extends Logging {
     resource.setVirtualCores(cpu)
     info("set cpu core request to %s for %s" format (cpu, appId.get))
     appCtx.setResource(resource)
-    containerCtx.setCommands(cmds.toList)
+    containerCtx.setCommands(cmds.asJava)
     info("set command to %s for %s" format (cmds, appId.get))
 
     appCtx.setApplicationId(appId.get)
@@ -166,6 +168,17 @@ class ClientHelper(conf: Configuration) extends Logging {
 
     val localResources: HashMap[String, LocalResource] = HashMap[String, LocalResource]()
     localResources += "__package" -> packageResource
+
+
+    // include the resources from the universal resource configurations
+    try {
+      val resourceMapper = new LocalizerResourceMapper(new LocalizerResourceConfig(config), new YarnConfiguration(conf))
+      localResources ++= resourceMapper.getResourceMap.asScala
+    } catch {
+      case e: LocalizerResourceException => {
+        throw new SamzaException("Exception during resource mapping from config. ", e)
+      }
+    }
 
     if (UserGroupInformation.isSecurityEnabled()) {
       validateJobConfig(config)
@@ -187,12 +200,14 @@ class ClientHelper(conf: Configuration) extends Logging {
       coordinatorStreamWriter.stop()
     }
 
-    containerCtx.setLocalResources(localResources)
+    // prepare all local resources for localizer
+    info("localResources is: %s" format localResources)
+    containerCtx.setLocalResources(localResources.asJava)
     info("set local resources on application master for %s" format appId.get)
 
     env match {
       case Some(env) => {
-        containerCtx.setEnvironment(env)
+        containerCtx.setEnvironment(env.asJava)
         info("set environment variables to %s for %s" format (env, appId.get))
       }
       case None =>
@@ -203,6 +218,35 @@ class ClientHelper(conf: Configuration) extends Logging {
     info("submitting application request for %s" format appId.get)
     yarnClient.submitApplication(appCtx)
     appId
+  }
+
+  /**
+    * Gets the list of Yarn [[org.apache.hadoop.yarn.api.records.ApplicationId]]
+    * corresponding to the specified appName and are "active".
+    * <p>
+    * In this context, "active" means that the application is starting or running
+    * and is not in any terminated state.
+    * <p>
+    * In Samza, an appName should be unique and there should only be one active
+    * applicationId for a given appName, but this can be violated in unusual cases
+    * like while troubleshooting a new application. So, this method returns as many
+    * active application ids as it finds.
+    *
+    * @param appName the app name as found in the Name column in the Yarn application list.
+    * @return        the active application ids.
+    */
+  def getActiveApplicationIds(appName: String): List[ApplicationId] = {
+    val getAppsRsp = yarnClient.getApplications
+
+    getAppsRsp
+      .asScala
+        .filter(appRep => ((
+            Running.equals(convertState(appRep.getYarnApplicationState, appRep.getFinalApplicationStatus).get)
+            || New.equals(convertState(appRep.getYarnApplicationState, appRep.getFinalApplicationStatus).get)
+            )
+          && appName.equals(appRep.getName)))
+        .map(appRep => appRep.getApplicationId)
+        .toList
   }
 
   def status(appId: ApplicationId): Option[ApplicationStatus] = {
@@ -217,8 +261,8 @@ class ClientHelper(conf: Configuration) extends Logging {
   def getApplicationMaster(appId: ApplicationId): Option[ApplicationReport] = {
     yarnClient
       .getApplications
-      .filter(appRep => appId.equals(appRep.getApplicationId()))
-      .headOption
+      .asScala
+      .find(appRep => appId.equals(appRep.getApplicationId))
   }
 
   def getApplicationMasters(status: Option[ApplicationStatus]): List[ApplicationReport] = {
@@ -226,16 +270,17 @@ class ClientHelper(conf: Configuration) extends Logging {
 
     status match {
       case Some(status) => getAppsRsp
+        .asScala
         .filter(appRep => status.equals(convertState(appRep.getYarnApplicationState, appRep.getFinalApplicationStatus).get))
         .toList
-      case None => getAppsRsp.toList
+      case None => getAppsRsp.asScala.toList
     }
   }
 
   private def convertState(state: YarnApplicationState, status: FinalApplicationStatus): Option[ApplicationStatus] = {
     (state, status) match {
       case (YarnApplicationState.FINISHED, FinalApplicationStatus.SUCCEEDED) => Some(SuccessfulFinish)
-      case (YarnApplicationState.KILLED, _) | (YarnApplicationState.FAILED, _) => Some(UnsuccessfulFinish)
+      case (YarnApplicationState.KILLED, _) | (YarnApplicationState.FAILED, _) | (YarnApplicationState.FINISHED, _) => Some(UnsuccessfulFinish)
       case (YarnApplicationState.NEW, _) | (YarnApplicationState.SUBMITTED, _) => Some(New)
       case _ => Some(Running)
     }
@@ -321,6 +366,8 @@ class ClientHelper(conf: Configuration) extends Logging {
     * Cleanup application staging directory.
     */
   def cleanupStagingDir(): Unit = {
-    YarnJobUtil.cleanupStagingDir(jobContext, FileSystem.get(conf))
+    if (jobContext != null) {
+      YarnJobUtil.cleanupStagingDir(jobContext, FileSystem.get(conf))
+    }
   }
 }

@@ -20,6 +20,8 @@ package org.apache.samza.standalone;
 
 import com.google.common.annotations.VisibleForTesting;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.samza.SamzaException;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JavaSystemConfig;
@@ -27,6 +29,7 @@ import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobModelManager;
 import org.apache.samza.job.model.JobModel;
 import org.apache.samza.processor.SamzaContainerController;
+import org.apache.samza.runtime.ProcessorIdGenerator;
 import org.apache.samza.system.StreamMetadataCache;
 import org.apache.samza.system.SystemAdmin;
 import org.apache.samza.system.SystemFactory;
@@ -34,9 +37,6 @@ import org.apache.samza.util.SystemClock;
 import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Standalone Job Coordinator does not implement any leader elector module or cluster manager
@@ -63,27 +63,27 @@ import java.util.Map;
  * */
 public class StandaloneJobCoordinator implements JobCoordinator {
   private static final Logger log = LoggerFactory.getLogger(StandaloneJobCoordinator.class);
-  private final int processorId;
+  private final String processorId;
   private final Config config;
   private final JobModel jobModel;
   private final SamzaContainerController containerController;
 
   @VisibleForTesting
   StandaloneJobCoordinator(
-      int processorId,
+      ProcessorIdGenerator processorIdGenerator,
       Config config,
       SamzaContainerController containerController,
       JobModel jobModel) {
-    this.processorId = processorId;
+    this.processorId = processorIdGenerator.generateProcessorId(config);
     this.config = config;
     this.containerController = containerController;
     this.jobModel = jobModel;
   }
 
-  public StandaloneJobCoordinator(int processorId, Config config, SamzaContainerController containerController) {
-    this.processorId = processorId;
+  public StandaloneJobCoordinator(String processorId, Config config, SamzaContainerController containerController) {
     this.config = config;
     this.containerController = containerController;
+    this.processorId = processorId;
 
     JavaSystemConfig systemConfig = new JavaSystemConfig(this.config);
     Map<String, SystemAdmin> systemAdmins = new HashMap<>();
@@ -113,7 +113,7 @@ public class StandaloneJobCoordinator implements JobCoordinator {
     // No-op
     JobModel jobModel = getJobModel();
     containerController.startContainer(
-        jobModel.getContainers().get(processorId),
+        jobModel.getContainers().get(getProcessorId()),
         jobModel.getConfig(),
         jobModel.maxChangeLogStreamPartitions);
   }
@@ -137,8 +137,8 @@ public class StandaloneJobCoordinator implements JobCoordinator {
   }
 
   @Override
-  public int getProcessorId() {
-    return this.processorId;
+  public String getProcessorId() {
+    return processorId;
   }
 
   @Override

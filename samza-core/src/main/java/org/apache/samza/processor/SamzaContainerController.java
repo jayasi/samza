@@ -20,6 +20,13 @@
 package org.apache.samza.processor;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.apache.samza.config.ClusterManagerConfig;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.TaskConfigJava;
@@ -33,22 +40,15 @@ import org.apache.samza.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 public class SamzaContainerController {
   private static final Logger log = LoggerFactory.getLogger(SamzaContainerController.class);
 
-  private final ExecutorService executorService;
+  private ExecutorService executorService;
   private volatile SamzaContainer container;
   private final Map<String, MetricsReporter> metricsReporterMap;
   private final Object taskFactory;
   private final long containerShutdownMs;
+  private final StreamProcessorLifecycleListener lifecycleListener;
 
   // Internal Member Variables
   private Future containerFuture;
@@ -60,16 +60,14 @@ public class SamzaContainerController {
    * @param taskFactory         Factory that be used create instances of {@link org.apache.samza.task.StreamTask} or
    *                            {@link org.apache.samza.task.AsyncStreamTask}
    * @param containerShutdownMs How long the Samza container should wait for an orderly shutdown of task instances
-   * @param processorId         Id of the processor
    * @param metricsReporterMap  Map of metric reporter name and {@link MetricsReporter} instance
+   * @param lifecycleListener {@link StreamProcessorLifecycleListener}
    */
   public SamzaContainerController(
       Object taskFactory,
       long containerShutdownMs,
-      String processorId,
-      Map<String, MetricsReporter> metricsReporterMap) {
-    this.executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-        .setNameFormat("p" + processorId + "-container-thread-%d").build());
+      Map<String, MetricsReporter> metricsReporterMap,
+      StreamProcessorLifecycleListener lifecycleListener) {
     this.taskFactory = taskFactory;
     this.metricsReporterMap = metricsReporterMap;
     if (containerShutdownMs == -1) {
@@ -77,6 +75,8 @@ public class SamzaContainerController {
     } else {
       this.containerShutdownMs = containerShutdownMs;
     }
+    // life cycle callbacks when shutdown and failure happens
+    this.lifecycleListener = lifecycleListener;
   }
 
   /**
@@ -94,22 +94,29 @@ public class SamzaContainerController {
   public void startContainer(ContainerModel containerModel, Config config, int maxChangelogStreamPartitions) {
     LocalityManager localityManager = null;
     if (new ClusterManagerConfig(config).getHostAffinityEnabled()) {
-      localityManager = SamzaContainer$.MODULE$.getLocalityManager(containerModel.getContainerId(), config);
+      localityManager = SamzaContainer$.MODULE$.getLocalityManager(containerModel.getProcessorId(), config);
     }
-    log.info("About to create container: " + containerModel.getContainerId());
+    log.info("About to create container: " + containerModel.getProcessorId());
     container = SamzaContainer$.MODULE$.apply(
-        containerModel.getContainerId(),
+        containerModel.getProcessorId(),
         containerModel,
         config,
         maxChangelogStreamPartitions,
         localityManager,
         new JmxServer(),
         Util.<String, MetricsReporter>javaMapAsScalaMap(metricsReporterMap),
-        taskFactory,
-        // TODO: need to use the correct local ApplicationRunner here
-        null);
-    log.info("About to start container: " + containerModel.getContainerId());
-    containerFuture = executorService.submit(() -> container.run());
+        taskFactory);
+    log.info("About to start container: " + containerModel.getProcessorId());
+    executorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+        .setNameFormat("p-" + containerModel.getProcessorId() + "-container-thread-%d").build());
+    containerFuture = executorService.submit(() -> {
+        try {
+          container.run();
+          lifecycleListener.onShutdown();
+        } catch (Throwable t) {
+          lifecycleListener.onFailure(t);
+        }
+      });
   }
 
   /**
@@ -150,6 +157,8 @@ public class SamzaContainerController {
    */
   public void shutdown() {
     stopContainer();
-    executorService.shutdown();
+    if (executorService != null) {
+      executorService.shutdown();
+    }
   }
 }

@@ -19,8 +19,14 @@
 package org.apache.samza.runtime;
 
 import java.util.Map;
+import org.apache.samza.application.StreamApplication;
 import org.apache.samza.config.Config;
+import org.apache.samza.config.JavaSystemConfig;
 import org.apache.samza.config.StreamConfig;
+import org.apache.samza.execution.ExecutionPlan;
+import org.apache.samza.execution.ExecutionPlanner;
+import org.apache.samza.execution.StreamManager;
+import org.apache.samza.operators.StreamGraphImpl;
 import org.apache.samza.system.StreamSpec;
 
 
@@ -29,15 +35,20 @@ import org.apache.samza.system.StreamSpec;
  */
 public abstract class AbstractApplicationRunner extends ApplicationRunner {
 
+  private final StreamManager streamManager;
+  private final ExecutionPlanner planner;
+
   public AbstractApplicationRunner(Config config) {
     super(config);
+    this.streamManager = new StreamManager(new JavaSystemConfig(config).getSystemAdmins());
+    this.planner = new ExecutionPlanner(config, streamManager);
   }
 
   @Override
-  public StreamSpec getStream(String streamId) {
+  public StreamSpec getStreamSpec(String streamId) {
     StreamConfig streamConfig = new StreamConfig(config);
     String physicalName = streamConfig.getPhysicalName(streamId);
-    return getStream(streamId, physicalName);
+    return getStreamSpec(streamId, physicalName);
   }
 
   /**
@@ -58,11 +69,11 @@ public abstract class AbstractApplicationRunner extends ApplicationRunner {
    * @param physicalName  The system-specific name for this stream. It could be a file URN, topic name, or other identifer.
    * @return              The {@link StreamSpec} instance.
    */
-  /*package private*/ StreamSpec getStream(String streamId, String physicalName) {
+  /*package private*/ StreamSpec getStreamSpec(String streamId, String physicalName) {
     StreamConfig streamConfig = new StreamConfig(config);
     String system = streamConfig.getSystem(streamId);
 
-    return getStream(streamId, physicalName, system);
+    return getStreamSpec(streamId, physicalName, system);
   }
 
   /**
@@ -76,10 +87,23 @@ public abstract class AbstractApplicationRunner extends ApplicationRunner {
    * @param system        The name of the System on which this stream will be used.
    * @return              The {@link StreamSpec} instance.
    */
-  /*package private*/ StreamSpec getStream(String streamId, String physicalName, String system) {
+  /*package private*/ StreamSpec getStreamSpec(String streamId, String physicalName, String system) {
     StreamConfig streamConfig = new StreamConfig(config);
     Map<String, String> properties = streamConfig.getStreamProperties(streamId);
 
     return new StreamSpec(streamId, physicalName, system, properties);
+  }
+
+  final ExecutionPlan getExecutionPlan(StreamApplication app) throws Exception {
+    // build stream graph
+    StreamGraphImpl streamGraph = new StreamGraphImpl(this, config);
+    app.init(streamGraph, config);
+
+    // create the physical execution plan
+    return planner.plan(streamGraph);
+  }
+
+  final StreamManager getStreamManager() {
+    return streamManager;
   }
 }

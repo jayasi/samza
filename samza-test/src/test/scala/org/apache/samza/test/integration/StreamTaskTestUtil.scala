@@ -35,7 +35,7 @@ import org.apache.samza.Partition
 import org.apache.samza.checkpoint.Checkpoint
 import org.apache.kafka.common.protocol.SecurityProtocol
 import org.apache.kafka.common.security.JaasUtils
-import org.apache.samza.config.{Config, KafkaProducerConfig, MapConfig}
+import org.apache.samza.config.{ApplicationConfig, Config, KafkaProducerConfig, MapConfig}
 import org.apache.samza.container.TaskName
 import org.apache.samza.job.local.ThreadJobFactory
 import org.apache.samza.job.{ApplicationStatus, JobRunner, StreamJob}
@@ -45,7 +45,7 @@ import org.apache.samza.task._
 import org.apache.samza.util.{ClientUtilTopicMetadataStore, KafkaUtil, TopicMetadataStore}
 import org.junit.Assert._
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Buffer, HashMap, SynchronizedMap}
 
 /*
@@ -70,8 +70,8 @@ object StreamTaskTestUtil {
   def zkConnect: String = s"127.0.0.1:$zkPort"
 
   var producer: Producer[Array[Byte], Array[Byte]] = null
-  val cp1 = new Checkpoint(Map(new SystemStreamPartition("kafka", "topic", new Partition(0)) -> "123"))
-  val cp2 = new Checkpoint(Map(new SystemStreamPartition("kafka", "topic", new Partition(0)) -> "12345"))
+  val cp1 = new Checkpoint(Map(new SystemStreamPartition("kafka", "topic", new Partition(0)) -> "123").asJava)
+  val cp2 = new Checkpoint(Map(new SystemStreamPartition("kafka", "topic", new Partition(0)) -> "12345").asJava)
 
   var metadataStore: TopicMetadataStore = null
 
@@ -81,6 +81,7 @@ object StreamTaskTestUtil {
   var jobConfig = Map(
     "job.factory.class" -> classOf[ThreadJobFactory].getCanonicalName,
     "job.coordinator.system" -> "kafka",
+    ApplicationConfig.PROCESSOR_ID -> "1",
     "task.inputs" -> "kafka.input",
     "serializers.registry.string.class" -> "org.apache.samza.serializers.StringSerdeFactory",
     "systems.kafka.samza.factory" -> "org.apache.samza.system.kafka.KafkaSystemFactory",
@@ -203,7 +204,7 @@ class StreamTaskTestUtil {
    */
   def startJob = {
     // Start task.
-    val job = new JobRunner(new MapConfig(jobConfig)).run()
+    val job = new JobRunner(new MapConfig(jobConfig.asJava)).run()
     assertEquals(ApplicationStatus.Running, job.waitForStatus(ApplicationStatus.Running, 60000))
     TestTask.awaitTaskRegistered
     val tasks = TestTask.tasks
@@ -246,7 +247,7 @@ class StreamTaskTestUtil {
 
     val consumerConfig = new ConsumerConfig(props)
     val consumerConnector = Consumer.create(consumerConfig)
-    var stream = consumerConnector.createMessageStreams(Map(topic -> 1)).get(topic).get.get(0).iterator
+    val stream = consumerConnector.createMessageStreams(Map(topic -> 1))(topic).head.iterator
     var message: MessageAndMetadata[Array[Byte], Array[Byte]] = null
     var messages = ArrayBuffer[String]()
 

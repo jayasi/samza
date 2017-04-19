@@ -21,7 +21,6 @@ package org.apache.samza.processor;
 import org.apache.samza.annotation.InterfaceStability;
 import org.apache.samza.config.Config;
 import org.apache.samza.config.JobCoordinatorConfig;
-import org.apache.samza.config.MapConfig;
 import org.apache.samza.config.TaskConfigJava;
 import org.apache.samza.coordinator.JobCoordinator;
 import org.apache.samza.coordinator.JobCoordinatorFactory;
@@ -29,10 +28,7 @@ import org.apache.samza.metrics.MetricsReporter;
 import org.apache.samza.task.AsyncStreamTaskFactory;
 import org.apache.samza.task.StreamTaskFactory;
 import org.apache.samza.util.Util;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -60,18 +56,9 @@ import java.util.Map;
  */
 @InterfaceStability.Evolving
 public class StreamProcessor {
-  private static final Logger log = LoggerFactory.getLogger(StreamProcessor.class);
-  /**
-   * processor.id is equivalent to containerId in samza. It is a logical identifier used by Samza for a processor.
-   * In a distributed environment, this logical identifier is mapped to a physical identifier of the resource. For
-   * example, Yarn provides a "containerId" for every resource it allocates.
-   * In an embedded environment, this identifier is provided by the user by directly using the StreamProcessor API.
-   * <p>
-   * <b>Note:</b>This identifier has to be unique across the instances of StreamProcessors.
-   */
-  private static final String PROCESSOR_ID = "processor.id";
-  private final int processorId;
   private final JobCoordinator jobCoordinator;
+  private final StreamProcessorLifecycleListener lifecycleListener;
+  private final String processorId;
 
   /**
    * Create an instance of StreamProcessor that encapsulates a JobCoordinator and Samza Container
@@ -83,63 +70,47 @@ public class StreamProcessor {
    * <p>
    * <b>Note:</b> Lifecycle of the ExecutorService is fully managed by the StreamProcessor, and NOT exposed to the user
    *
-   * @param processorId            Unique identifier for a processor within the job. It has the same semantics as
-   *                               "containerId" in Samza
    * @param config                 Instance of config object - contains all configuration required for processing
    * @param customMetricsReporters Map of custom MetricReporter instances that are to be injected in the Samza job
    * @param asyncStreamTaskFactory The {@link AsyncStreamTaskFactory} to be used for creating task instances.
+   * @param lifecycleListener         listener to the StreamProcessor life cycle
    */
-  public StreamProcessor(int processorId, Config config, Map<String, MetricsReporter> customMetricsReporters,
-                         AsyncStreamTaskFactory asyncStreamTaskFactory) {
-    this(processorId, config, customMetricsReporters, (Object) asyncStreamTaskFactory);
+  public StreamProcessor(String processorId, Config config, Map<String, MetricsReporter> customMetricsReporters,
+                         AsyncStreamTaskFactory asyncStreamTaskFactory, StreamProcessorLifecycleListener lifecycleListener) {
+    this(processorId, config, customMetricsReporters, (Object) asyncStreamTaskFactory, lifecycleListener);
   }
 
 
   /**
-   *Same as {@link #StreamProcessor(int, Config, Map, AsyncStreamTaskFactory)}, except task instances are created
-   * using the provided {@link StreamTaskFactory}.
-   * @param processorId - this processor Id
+   *Same as {@link #StreamProcessor(String, Config, Map, AsyncStreamTaskFactory, StreamProcessorLifecycleListener)}, except task
+   * instances are created using the provided {@link StreamTaskFactory}.
    * @param config - config
    * @param customMetricsReporters metric Reporter
    * @param streamTaskFactory task factory to instantiate the Task
+   * @param lifecycleListener  listener to the StreamProcessor life cycle
    */
-  public StreamProcessor(int processorId, Config config, Map<String, MetricsReporter> customMetricsReporters,
-                         StreamTaskFactory streamTaskFactory) {
-    this(processorId, config, customMetricsReporters, (Object) streamTaskFactory);
+  public StreamProcessor(String processorId, Config config, Map<String, MetricsReporter> customMetricsReporters,
+                         StreamTaskFactory streamTaskFactory, StreamProcessorLifecycleListener lifecycleListener) {
+    this(processorId, config, customMetricsReporters, (Object) streamTaskFactory, lifecycleListener);
   }
 
-  /**
-   * Same as {@link #StreamProcessor(int, Config, Map, AsyncStreamTaskFactory)}, except task instances are created
-   * using the "task.class" configuration instead of a task factory.
-   * @param processorId - this processor Id
-   * @param config - config
-   * @param customMetricsReporters metrics
-   */
-  public StreamProcessor(int processorId, Config config, Map<String, MetricsReporter> customMetricsReporters) {
-    this(processorId, config, customMetricsReporters, (Object) null);
-  }
-
-  private StreamProcessor(int processorId, Config config, Map<String, MetricsReporter> customMetricsReporters,
-                          Object taskFactory) {
+  private StreamProcessor(String processorId, Config config, Map<String, MetricsReporter> customMetricsReporters,
+                          Object taskFactory, StreamProcessorLifecycleListener lifecycleListener) {
     this.processorId = processorId;
-
-    Map<String, String> updatedConfigMap = new HashMap<>();
-    updatedConfigMap.putAll(config);
-    updatedConfigMap.put(PROCESSOR_ID, String.valueOf(this.processorId));
-    Config updatedConfig = new MapConfig(updatedConfigMap);
-
 
     SamzaContainerController containerController = new SamzaContainerController(
         taskFactory,
-        new TaskConfigJava(updatedConfig).getShutdownMs(),
-        String.valueOf(processorId),
-        customMetricsReporters);
+        new TaskConfigJava(config).getShutdownMs(),
+        customMetricsReporters,
+        lifecycleListener);
 
     this.jobCoordinator = Util.
         <JobCoordinatorFactory>getObj(
-            new JobCoordinatorConfig(updatedConfig)
+            new JobCoordinatorConfig(config)
                 .getJobCoordinatorFactoryClassName())
-        .getJobCoordinator(processorId, updatedConfig, containerController);
+        .getJobCoordinator(processorId, config, containerController);
+
+    this.lifecycleListener = lifecycleListener;
   }
 
   /**
@@ -153,6 +124,7 @@ public class StreamProcessor {
    */
   public void start() {
     jobCoordinator.start();
+    lifecycleListener.onStart();
   }
 
   /**

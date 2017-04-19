@@ -25,7 +25,7 @@ import java.util.regex.Pattern
 import org.apache.samza.util.Util
 import org.apache.samza.util.Logging
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import kafka.consumer.ConsumerConfig
 import java.util.{Properties, UUID}
 
@@ -52,6 +52,7 @@ object KafkaConfig {
   val CHECKPOINT_SEGMENT_BYTES = "task.checkpoint.segment.bytes"
 
   val CHANGELOG_STREAM_REPLICATION_FACTOR = "stores.%s.changelog." + TOPIC_REPLICATION_FACTOR
+  val DEFAULT_CHANGELOG_STREAM_REPLICATION_FACTOR = CHANGELOG_STREAM_REPLICATION_FACTOR format "default"
   val CHANGELOG_STREAM_KAFKA_SETTINGS = "stores.%s.changelog.kafka."
   // The default segment size to use for changelog topics
   val CHANGELOG_DEFAULT_SEGMENT_SIZE = "536870912"
@@ -102,6 +103,7 @@ class KafkaConfig(config: Config) extends ScalaMapConfig(config) {
   def getFetchMessageMaxBytesTopics(systemName: String) = {
     val subConf = config.subset("systems.%s.streams." format systemName, true)
     subConf
+      .asScala
       .filterKeys(k => k.endsWith(".consumer.fetch.message.max.bytes"))
       .map {
         case (fetchMessageMaxBytes, fetchSizeValue) =>
@@ -116,6 +118,7 @@ class KafkaConfig(config: Config) extends ScalaMapConfig(config) {
   def getAutoOffsetResetTopics(systemName: String) = {
     val subConf = config.subset("systems.%s.streams." format systemName, true)
     subConf
+      .asScala
       .filterKeys(k => k.endsWith(".consumer.auto.offset.reset"))
       .map {
         case (topicAutoOffsetReset, resetValue) =>
@@ -130,7 +133,8 @@ class KafkaConfig(config: Config) extends ScalaMapConfig(config) {
 
   def getRegexResolvedInheritedConfig(rewriterName: String) = config.subset((KafkaConfig.REGEX_INHERITED_CONFIG format rewriterName) + ".", true)
 
-  def getChangelogStreamReplicationFactor(name: String) = getOption(KafkaConfig.CHANGELOG_STREAM_REPLICATION_FACTOR format name)
+  def getChangelogStreamReplicationFactor(name: String) = getOption(KafkaConfig.CHANGELOG_STREAM_REPLICATION_FACTOR format name).getOrElse(getDefaultChangelogStreamReplicationFactor)
+  def getDefaultChangelogStreamReplicationFactor = getOption(KafkaConfig.DEFAULT_CHANGELOG_STREAM_REPLICATION_FACTOR).getOrElse("2")
 
   // The method returns a map of storenames to changelog topic names, which are configured to use kafka as the changelog stream
   def getKafkaChangelogEnabledStores() = {
@@ -162,7 +166,7 @@ class KafkaConfig(config: Config) extends ScalaMapConfig(config) {
     kafkaChangeLogProperties.setProperty("cleanup.policy", "compact")
     kafkaChangeLogProperties.setProperty("segment.bytes", KafkaConfig.CHANGELOG_DEFAULT_SEGMENT_SIZE)
     kafkaChangeLogProperties.setProperty("delete.retention.ms", String.valueOf(new StorageConfig(config).getChangeLogDeleteRetentionInMs(name)))
-    filteredConfigs.foreach { kv => kafkaChangeLogProperties.setProperty(kv._1, kv._2) }
+    filteredConfigs.asScala.foreach { kv => kafkaChangeLogProperties.setProperty(kv._1, kv._2) }
     kafkaChangeLogProperties
   }
 
@@ -177,7 +181,7 @@ class KafkaConfig(config: Config) extends ScalaMapConfig(config) {
     consumerProps.putAll(subConf)
     consumerProps.put("group.id", groupId)
     consumerProps.put("client.id", clientId)
-    consumerProps.putAll(injectedProps)
+    consumerProps.putAll(injectedProps.asJava)
     new ConsumerConfig(consumerProps)
   }
 
@@ -189,7 +193,7 @@ class KafkaConfig(config: Config) extends ScalaMapConfig(config) {
     val producerProps = new util.HashMap[String, Object]()
     producerProps.putAll(subConf)
     producerProps.put("client.id", clientId)
-    producerProps.putAll(injectedProps)
+    producerProps.putAll(injectedProps.asJava)
     new KafkaProducerConfig(systemName, clientId, producerProps)
   }
 }

@@ -19,26 +19,28 @@
 package org.apache.samza.operators;
 
 import com.google.common.collect.ImmutableSet;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import org.apache.samza.Partition;
 import org.apache.samza.application.StreamApplication;
 import org.apache.samza.config.Config;
-import org.apache.samza.operators.data.MessageEnvelope;
 import org.apache.samza.operators.functions.JoinFunction;
 import org.apache.samza.runtime.ApplicationRunner;
 import org.apache.samza.system.IncomingMessageEnvelope;
+import org.apache.samza.system.OutgoingMessageEnvelope;
 import org.apache.samza.system.StreamSpec;
+import org.apache.samza.system.SystemStream;
 import org.apache.samza.system.SystemStreamPartition;
 import org.apache.samza.task.MessageCollector;
 import org.apache.samza.task.StreamOperatorTask;
 import org.apache.samza.task.TaskContext;
 import org.apache.samza.task.TaskCoordinator;
-import org.junit.Before;
+import org.apache.samza.testUtils.TestClock;
+import org.apache.samza.util.Clock;
+import org.apache.samza.util.SystemClock;
 import org.junit.Test;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -46,54 +48,46 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TestJoinOperator {
-  private final MessageCollector messageCollector = mock(MessageCollector.class);
   private final TaskCoordinator taskCoordinator = mock(TaskCoordinator.class);
   private final Set<Integer> numbers = ImmutableSet.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 
-  private StreamOperatorTask sot;
-  private List<Integer> output = new ArrayList<>();
-  private final ApplicationRunner runner = mock(ApplicationRunner.class);
-
-
-  @Before
-  public void setup() throws Exception {
-    output.clear();
-
-    TaskContext taskContext = mock(TaskContext.class);
-    when(taskContext.getSystemStreamPartitions()).thenReturn(ImmutableSet
-        .of(new SystemStreamPartition("insystem", "instream", new Partition(0)),
-            new SystemStreamPartition("insystem2", "instream2", new Partition(0))));
-    Config config = mock(Config.class);
-
-    StreamApplication sgb = new TestStreamApplication();
-    sot = new StreamOperatorTask(sgb, runner);
-    sot.init(config, taskContext);
-  }
-
   @Test
-  public void join() {
+  public void join() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to first stream
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to second stream with same keys
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
 
+
     int outputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(outputSum, 110);
+    assertEquals(110, outputSum);
   }
 
   @Test
-  public void joinReverse() {
+  public void joinReverse() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to second stream
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to first stream with same keys
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
 
     int outputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(outputSum, 110);
+    assertEquals(110, outputSum);
   }
 
   @Test
-  public void joinNoMatch() {
+  public void joinNoMatch() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to first stream
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to second stream with different keys
@@ -103,7 +97,11 @@ public class TestJoinOperator {
   }
 
   @Test
-  public void joinNoMatchReverse() {
+  public void joinNoMatchReverse() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to second stream
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to first stream with different keys
@@ -113,7 +111,11 @@ public class TestJoinOperator {
   }
 
   @Test
-  public void joinRetainsLatestMessageForKey() {
+  public void joinRetainsLatestMessageForKey() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to first stream
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to first stream again with same keys but different values
@@ -122,11 +124,15 @@ public class TestJoinOperator {
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
 
     int outputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(outputSum, 165); // should use latest messages in the first stream
+    assertEquals(165, outputSum); // should use latest messages in the first stream
   }
 
   @Test
-  public void joinRetainsLatestMessageForKeyReverse() {
+  public void joinRetainsLatestMessageForKeyReverse() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to second stream
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to second stream again with same keys but different values
@@ -135,51 +141,64 @@ public class TestJoinOperator {
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
 
     int outputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(outputSum, 165); // should use latest messages in the second stream
+    assertEquals(165, outputSum); // should use latest messages in the second stream
   }
 
   @Test
-  public void joinRetainsMatchedMessages() {
+  public void joinRetainsMatchedMessages() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to first stream
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to second stream with same key
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
 
     int outputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(outputSum, 110);
+    assertEquals(110, outputSum);
 
     output.clear();
 
     // push messages to first stream with same keys once again.
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
     int newOutputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(newOutputSum, 110); // should produce the same output as before
+    assertEquals(110, newOutputSum); // should produce the same output as before
   }
 
   @Test
-  public void joinRetainsMatchedMessagesReverse() {
+  public void joinRetainsMatchedMessagesReverse() throws Exception {
+    StreamOperatorTask sot = createStreamOperatorTask(new SystemClock());
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to first stream
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
     // push messages to second stream with same key
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
 
     int outputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(outputSum, 110);
+    assertEquals(110, outputSum);
 
     output.clear();
 
     // push messages to second stream with same keys once again.
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
     int newOutputSum = output.stream().reduce(0, (s, m) -> s + m);
-    assertEquals(newOutputSum, 110); // should produce the same output as before
+    assertEquals(110, newOutputSum); // should produce the same output as before
   }
 
   @Test
   public void joinRemovesExpiredMessages() throws Exception {
+    TestClock testClock = new TestClock();
+    StreamOperatorTask sot = createStreamOperatorTask(testClock);
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to first stream
     numbers.forEach(n -> sot.process(new FirstStreamIME(n, n), messageCollector, taskCoordinator));
 
-    Thread.sleep(100); // 10 * ttl for join
+    testClock.advanceTime(100);
     sot.window(messageCollector, taskCoordinator); // should expire first stream messages
 
     // push messages to second stream with same key
@@ -191,10 +210,15 @@ public class TestJoinOperator {
 
   @Test
   public void joinRemovesExpiredMessagesReverse() throws Exception {
+    TestClock testClock = new TestClock();
+    StreamOperatorTask sot = createStreamOperatorTask(testClock);
+    List<Integer> output = new ArrayList<>();
+    MessageCollector messageCollector = envelope -> output.add((Integer) envelope.getMessage());
+
     // push messages to second stream
     numbers.forEach(n -> sot.process(new SecondStreamIME(n, n), messageCollector, taskCoordinator));
 
-    Thread.sleep(100); // 10 * ttl for join
+    testClock.advanceTime(100); // 10 * ttl for join
     sot.window(messageCollector, taskCoordinator); // should expire second stream messages
 
     // push messages to first stream with same key
@@ -203,50 +227,64 @@ public class TestJoinOperator {
     assertTrue(output.isEmpty());
   }
 
-  private class TestStreamApplication implements StreamApplication {
-    StreamSpec inStreamSpec = new StreamSpec("instream", "instream", "insystem");
-    StreamSpec inStreamSpec2 = new StreamSpec("instream2", "instream2", "insystem2");
+  private StreamOperatorTask createStreamOperatorTask(Clock clock) throws Exception {
+    ApplicationRunner runner = mock(ApplicationRunner.class);
+    when(runner.getStreamSpec("instream")).thenReturn(new StreamSpec("instream", "instream", "insystem"));
+    when(runner.getStreamSpec("instream2")).thenReturn(new StreamSpec("instream2", "instream2", "insystem2"));
 
+    TaskContext taskContext = mock(TaskContext.class);
+    when(taskContext.getSystemStreamPartitions()).thenReturn(ImmutableSet
+        .of(new SystemStreamPartition("insystem", "instream", new Partition(0)),
+            new SystemStreamPartition("insystem2", "instream2", new Partition(0))));
+    Config config = mock(Config.class);
+
+    StreamApplication sgb = new TestStreamApplication();
+    StreamOperatorTask sot = new StreamOperatorTask(sgb, runner, clock);
+    sot.init(config, taskContext);
+    return sot;
+  }
+
+  private static class TestStreamApplication implements StreamApplication {
     @Override
     public void init(StreamGraph graph, Config config) {
-      MessageStream<MessageEnvelope<Integer, Integer>> inStream = graph.createInStream(inStreamSpec, null, null);
-      MessageStream<MessageEnvelope<Integer, Integer>> inStream2 = graph.createInStream(inStreamSpec2, null, null);
+      MessageStream<FirstStreamIME> inStream =
+          graph.getInputStream("instream", FirstStreamIME::new);
+      MessageStream<SecondStreamIME> inStream2 =
+          graph.getInputStream("instream2", SecondStreamIME::new);
 
+      SystemStream outputSystemStream = new SystemStream("outputSystem", "outputStream");
       inStream
           .join(inStream2, new TestJoinFunction(), Duration.ofMillis(10))
-          .map(m -> {
-              output.add(m);
-              return m;
+          .sink((message, messageCollector, taskCoordinator) -> {
+              messageCollector.send(new OutgoingMessageEnvelope(outputSystemStream, message));
             });
     }
   }
 
-  private class TestJoinFunction
-      implements JoinFunction<Integer, MessageEnvelope<Integer, Integer>, MessageEnvelope<Integer, Integer>, Integer> {
+  private static class TestJoinFunction implements JoinFunction<Integer, FirstStreamIME, SecondStreamIME, Integer> {
     @Override
-    public Integer apply(MessageEnvelope<Integer, Integer> message,
-        MessageEnvelope<Integer, Integer> otherMessage) {
-      return message.getMessage() + otherMessage.getMessage();
+    public Integer apply(FirstStreamIME message, SecondStreamIME otherMessage) {
+      return (Integer) message.getMessage() + (Integer) otherMessage.getMessage();
     }
 
     @Override
-    public Integer getFirstKey(MessageEnvelope<Integer, Integer> message) {
-      return message.getKey();
+    public Integer getFirstKey(FirstStreamIME message) {
+      return (Integer) message.getKey();
     }
 
     @Override
-    public Integer getSecondKey(MessageEnvelope<Integer, Integer> message) {
-      return message.getKey();
+    public Integer getSecondKey(SecondStreamIME message) {
+      return (Integer) message.getKey();
     }
   }
 
-  private class FirstStreamIME extends IncomingMessageEnvelope {
+  private static class FirstStreamIME extends IncomingMessageEnvelope {
     FirstStreamIME(Integer key, Integer message) {
       super(new SystemStreamPartition("insystem", "instream", new Partition(0)), "1", key, message);
     }
   }
 
-  private class SecondStreamIME extends IncomingMessageEnvelope {
+  private static class SecondStreamIME extends IncomingMessageEnvelope {
     SecondStreamIME(Integer key, Integer message) {
       super(new SystemStreamPartition("insystem2", "instream2", new Partition(0)), "1", key, message);
     }
