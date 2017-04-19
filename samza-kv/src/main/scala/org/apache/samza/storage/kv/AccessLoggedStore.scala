@@ -38,7 +38,6 @@ class AccessLoggedStore[K, V](
   }
 
   var interval = 0
-  val HEADER_INTERVAL = 100
   val systemStream = accessLogSystemStreamPartition.getSystemStream
   val partitionId = accessLogSystemStreamPartition.getPartition.getPartitionId
   val serializer = new StringSerde("UTF-8")
@@ -117,12 +116,11 @@ class AccessLoggedStore[K, V](
     var msg = message
     val timeStamp = System.nanoTime().toString
 
-    if (interval %HEADER_INTERVAL == 0) {
+    if (interval == 0) {
       addHeader()
-      interval = 0
     }
 
-    interval += 1
+    interval = 1
     msg += ", " + latency + ", " + timeStamp
     collector.send(new OutgoingMessageEnvelope(systemStream, partitionId, serializer.toBytes(timeStamp), serializer.toBytes(msg)))
     result
