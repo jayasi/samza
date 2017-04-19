@@ -54,7 +54,7 @@ class AccessLoggedStore[K, V](
   }
 
   def put(key: K, value: V): Unit = {
-    var message = DBOperations.WRITE + ","  + key
+    var message = DBOperations.WRITE + ", "  + key
     measureLatencyAndWriteToStream(message, store.put(key, value))
   }
 
